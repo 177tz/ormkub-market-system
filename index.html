@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>賣貨便賣場查詢</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; }
+        .hidden { display: none; }
+        .loading { text-align: center; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="container" style="max-width: 600px;">
+        <div id="loading" class="loading">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">系統載入中...</p>
+        </div>
+
+        <div id="register-view" class="card p-4 hidden">
+            <h3 class="text-center mb-4">第一次使用請註冊</h3>
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" id="reg-email" class="form-control" placeholder="請輸入 Email">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">群內名稱 (需完全一致)</label>
+                <input type="text" id="reg-name" class="form-control" placeholder="請輸入群組暱稱">
+            </div>
+            <button onclick="doRegister()" class="btn btn-primary w-100">註冊並登入</button>
+        </div>
+
+        <div id="market-view" class="hidden">
+            <h4 class="mb-3">👋 哈囉，<span id="user-name"></span></h4>
+            <p>以下是您的專屬賣場連結：</p>
+            <div id="market-list">
+                </div>
+        </div>
+    </div>
+
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <script>
+        // ================= 設定區 =================
+        // 請將下方網址換成你剛剛在 GAS 部署取得的網址
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec'; 
+        
+        // 請換成你的 LIFF ID
+        const MY_LIFF_ID = '2008873691-AM28m7jo'; 
+        // =========================================
+
+        let currentUid = '';
+
+        // 1. 初始化 LIFF
+        window.onload = function() {
+            liff.init({ liffId: MY_LIFF_ID })
+                .then(() => {
+                    if (!liff.isLoggedIn()) {
+                        liff.login();
+                    } else {
+                        // 取得使用者資料
+                        liff.getProfile().then(profile => {
+                            currentUid = profile.userId;
+                            checkUserStatus(currentUid);
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.error('LIFF 初始化失敗', err);
+                    alert('LIFF 初始化失敗，請確認 LIFF ID 是否正確');
+                });
+        };
+
+        // 2. 呼叫後端 API 的通用函式
+        async function callApi(action, payload) {
+            const response = await fetch(GAS_API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: action, payload: payload })
+            });
+            return await response.json();
+        }
+
+        // 3. 檢查使用者狀態
+        async function checkUserStatus(uid) {
+            try {
+                const res = await callApi('checkUser', { uid: uid });
+                document.getElementById('loading').classList.add('hidden');
+                
+                if (res.data) {
+                    // 已註冊 -> 顯示賣場列表
+                    showMarketView(res.data);
+                } else {
+                    // 未註冊 -> 顯示註冊表單
+                    document.getElementById('register-view').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('系統錯誤：' + e);
+            }
+        }
+
+        // 4. 執行註冊
+        async function doRegister() {
+            const email = document.getElementById('reg-email').value;
+            const name = document.getElementById('reg-name').value;
+            
+            if(!email || !name) return alert('請填寫完整資訊');
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('register-view').classList.add('hidden');
+
+            const payload = {
+                uid: currentUid,
+                email: email,
+                name: name
+                // 其他欄位可在此擴充
+            };
+
+            const res = await callApi('register', payload);
+            if(res.status === 'success') {
+                alert('註冊成功！');
+                checkUserStatus(currentUid); // 重新載入
+            } else {
+                alert('註冊失敗：' + res.message);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('register-view').classList.remove('hidden');
+            }
+        }
+
+        // 5. 顯示賣場與查詢
+        async function showMarketView(userData) {
+            document.getElementById('user-name').innerText = userData.name || userData.group_name;
+            document.getElementById('market-view').classList.remove('hidden');
+
+            // 查詢賣場資料
+            const res = await callApi('getMarkets', { uid: currentUid });
+            const listDiv = document.getElementById('market-list');
+            
+            if (res.data && res.data.length > 0) {
+                let html = '';
+                res.data.forEach(m => {
+                    html += `
+                        <div class="card mb-3 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">${m.title || '賣場'}</h5>
+                                <p class="card-text text-muted">${m.desc || ''}</p>
+                                <a href="${m.link}" target="_blank" class="btn btn-success w-100">前往賣貨便下單</a>
+                            </div>
+                        </div>
+                    `;
+                });
+                listDiv.innerHTML = html;
+            } else {
+                listDiv.innerHTML = '<p class="text-center text-muted">目前沒有您的專屬賣場連結。</p>';
+            }
+        }
+    </script>
+</body>
+</html>
