@@ -119,6 +119,19 @@
             });
             return await response.json();
         }
+        
+        // 2.1 新增：顯示美觀的彈窗 (取代 alert)
+        function showMsg(title, message) {
+            const modalEl = document.getElementById('infoModal');
+            const modalTitle = document.getElementById('infoModalTitle');
+            const modalBody = document.getElementById('infoModalBody');
+
+            modalTitle.innerText = title;
+            modalBody.innerText = message;
+
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
 
         // 3. 檢查使用者狀態
         async function checkUserStatus(uid) {
@@ -138,21 +151,19 @@
             }
         }
 
-        // 4. 執行註冊
+        // 4. 執行註冊 (已優化彈窗)
         async function doRegister() {
-            // 取得所有欄位的值
             const email = document.getElementById('reg-email').value.trim();
-            const name = document.getElementById('reg-name').value.trim(); // 去除前後空白
+            const name = document.getElementById('reg-name').value.trim();
             const receiver = document.getElementById('reg-receiver').value.trim();
             const phone = document.getElementById('reg-phone').value.trim();
             const store = document.getElementById('reg-store').value.trim();
             
-            // 簡易前端驗證：檢查是否有空值
             if(!email || !name || !receiver || !phone || !store) {
-                return alert('請填寫所有欄位，這些都是必填項目喔！');
+                // 改用 showMsg
+                return showMsg('資料未填寫完整', '請填寫所有欄位，這些都是必填項目喔！');
             }
 
-            // 顯示載入中，隱藏表單
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('register-view').classList.add('hidden');
 
@@ -169,32 +180,41 @@
                 const res = await callApi('register', payload);
                 
                 if(res.status === 'success') {
-                    alert('🎉 註冊成功！');
-                    // 重新檢查狀態，會自動進入賣場頁面
+                    // 這裡改用 showMsg，就不會有 GitHub 網址了
+                    showMsg('🎉 註冊成功', '歡迎使用！系統將自動為您載入賣場。');
+                    
                     checkUserStatus(currentUid); 
                 } else {
-                    // 後端傳回錯誤 (例如：Email 重複)
-                    alert('❌ ' + res.message); // 這裡會顯示 GAS 丟出的錯誤訊息
+                    showMsg('❌ 註冊失敗', res.message);
                     
-                    // 恢復顯示表單，讓使用者修改
                     document.getElementById('loading').classList.add('hidden');
                     document.getElementById('register-view').classList.remove('hidden');
                 }
             } catch (err) {
-                alert('系統連線錯誤，請稍後再試。');
+                showMsg('系統錯誤', '連線失敗，請稍後再試。');
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('register-view').classList.remove('hidden');
             }
         }
-
-        // 5. 顯示賣場與查詢
+        
+        // 5. 顯示賣場與查詢 (已優化 Loading)
         async function showMarketView(userData) {
             document.getElementById('user-name').innerText = userData.name || userData.group_name;
             document.getElementById('market-view').classList.remove('hidden');
 
+            const listDiv = document.getElementById('market-list');
+            
+            // --- 優化點：在呼叫 API 前，先顯示 Loading ---
+            listDiv.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-secondary" role="status"></div>
+                    <p class="mt-2 text-muted">正在搜尋您的專屬賣場，請稍候...</p>
+                </div>
+            `;
+            // -------------------------------------------
+
             // 查詢賣場資料
             const res = await callApi('getMarkets', { uid: currentUid });
-            const listDiv = document.getElementById('market-list');
             
             if (res.data && res.data.length > 0) {
                 let html = '';
@@ -211,7 +231,12 @@
                 });
                 listDiv.innerHTML = html;
             } else {
-                listDiv.innerHTML = '<p class="text-center text-muted">目前沒有您的專屬賣場連結。</p>';
+                listDiv.innerHTML = `
+                    <div class="alert alert-warning text-center" role="alert">
+                        目前沒有查詢到您的專屬賣場連結。<br>
+                        <small>請確認您在群組內的名稱是否正確，或聯繫管理員。</small>
+                    </div>
+                `;
             }
         }
     </script>
