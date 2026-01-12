@@ -28,7 +28,7 @@
             padding-bottom: 40px;
         }
 
-        /* 隱藏元素用 (搭配動畫) */
+        /* 隱藏元素用 */
         .hidden { display: none !important; }
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
 
@@ -37,7 +37,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* === 載入動畫 (全螢幕遮罩) === */
+        /* === 全螢幕載入動畫 === */
         #loading-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -55,13 +55,13 @@
             border: none;
             border-radius: 16px;
             background: white;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08); /* 柔和深陰影 */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
             padding: 2rem;
             margin-top: 2rem;
             transition: all 0.3s ease;
         }
 
-        /* === 表單美化 === */
+        /* === 表單美化 (浮動標籤) === */
         .form-floating > .form-control {
             border-radius: 12px;
             border: 1px solid #e0e0e0;
@@ -77,7 +77,7 @@
         .btn-custom {
             background: linear-gradient(45deg, var(--primary-color), #4b6cb7);
             border: none;
-            border-radius: 50px; /* 膠囊狀按鈕 */
+            border-radius: 50px;
             padding: 12px 30px;
             font-weight: 700;
             letter-spacing: 0.5px;
@@ -123,7 +123,8 @@
         
         <div class="brand-header fade-in">
             <div class="mt-4 brand-icon">
-                <i class="bi bi-bag-check-fill"></i> </div>
+                <i class="bi bi-bag-check-fill"></i>
+            </div>
             <h4 class="fw-bold" style="color: var(--primary-color);">賣場查詢系統</h4>
         </div>
 
@@ -150,7 +151,7 @@
 
             <div class="form-floating mb-3">
                 <input type="tel" id="reg-phone" class="form-control" placeholder="電話">
-                <label for="reg-phone">聯絡電話</label>
+                <label for="reg-phone">聯絡電話 (09xxxxxxxx)</label>
             </div>
 
             <div class="form-floating mb-3">
@@ -199,16 +200,15 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-
     <script>
-        // ================= 設定區 =================
-        // 請記得換回你原本的設定
+        // ================= 設定區 (已填入你的資料) =================
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec'; 
         const MY_LIFF_ID = '2008873691-AM28m7jo'; 
-        // =========================================
+        // ========================================================
 
         let currentUid = '';
 
+        // 1. 初始化 LIFF
         window.onload = function() {
             setTimeout(() => {
                 liff.init({ liffId: MY_LIFF_ID })
@@ -223,40 +223,51 @@
                     }
                 })
                 .catch((err) => {
-                    console.error(err);
-                    showMsg('系統錯誤', 'LIFF 初始化失敗，請檢查 ID 設定');
+                    console.error('LIFF Error:', err);
                     document.getElementById('loading-overlay').classList.add('hidden');
+                    showMsg('系統錯誤', 'LIFF 初始化失敗，請確認設定');
                 });
-            }, 500);
+            }, 300);
         };
 
-        // 驗證工具函式
+        // 2. 驗證工具
         function isValidEmail(email) {
-            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return re.test(email);
+            const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+            return re.test(String(email).toLowerCase());
         }
 
         function isValidPhone(phone) {
-            const re = /^09\d{8}$/; // 台灣手機格式：09開頭 + 8碼數字
+            // 嚴格檢查：09開頭 + 8個數字
+            const re = /^09\d{8}$/; 
             return re.test(phone);
         }
 
+        // 3. 呼叫 API (含超時保護)
         async function callApi(action, payload) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超時
+
             try {
                 const response = await fetch(GAS_API_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: action, payload: payload })
+                    body: JSON.stringify({ action: action, payload: payload }),
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
                 return await response.json();
             } catch (error) {
+                clearTimeout(timeoutId);
                 console.error("API Error:", error);
-                return { status: 'error', message: '無法連接伺服器' };
+                return { status: 'error', message: '網路連線逾時或後端無回應' };
             }
         }
 
+        // 4. 檢查使用者狀態
         async function checkUserStatus(uid) {
             try {
                 const res = await callApi('checkUser', { uid: uid });
+                
+                // 收到回應後，隱藏全螢幕 Loading
                 document.getElementById('loading-overlay').classList.add('hidden');
                 
                 if (res.status === 'success' && res.data) {
@@ -265,11 +276,12 @@
                     document.getElementById('register-view').classList.remove('hidden');
                 }
             } catch (e) {
-                showMsg('連線錯誤', '無法連接伺服器，請重新整理');
                 document.getElementById('loading-overlay').classList.add('hidden');
+                showMsg('連線錯誤', '無法連接伺服器，請重新整理');
             }
         }
 
+        // 5. 執行註冊 (含驗證)
         async function doRegister() {
             const email = document.getElementById('reg-email').value.trim();
             const name = document.getElementById('reg-name').value.trim();
@@ -277,20 +289,21 @@
             const phone = document.getElementById('reg-phone').value.trim();
             const store = document.getElementById('reg-store').value.trim();
             
-            // --- 1. 基本空值檢查 ---
+            // 檢查空值
             if(!email || !name || !receiver || !phone || !store) {
                 return showMsg('資料不完整', '所有欄位都是必填的喔！');
             }
 
-            // --- 2. 格式驗證 (新增) ---
+            // 檢查格式
             if (!isValidEmail(email)) {
-                return showMsg('格式錯誤', '請輸入正確的 Email 格式 (例如: user@example.com)');
-            }
-            if (!isValidPhone(phone)) {
-                return showMsg('格式錯誤', '請輸入正確的手機號碼 (需為 09 開頭的 10 碼數字)');
+                return showMsg('Email 格式錯誤', '請輸入正確的信箱');
             }
 
-            // 顯示 Loading
+            if (!isValidPhone(phone)) {
+                return showMsg('手機格式錯誤', '請輸入 09 開頭的 10 碼數字');
+            }
+
+            // 開啟 Loading
             document.getElementById('loading-overlay').classList.remove('hidden');
             document.getElementById('register-view').classList.add('hidden');
 
@@ -305,25 +318,25 @@
 
             const res = await callApi('register', payload);
             
-            // 無論成功失敗，都要隱藏全螢幕 Loading
             document.getElementById('loading-overlay').classList.add('hidden');
 
             if(res.status === 'success') {
-                showMsg('🎉 歡迎加入', '註冊成功！即將為您載入賣場。');
+                showMsg('🎉 註冊成功', '歡迎加入！系統將自動為您搜尋賣場。');
                 checkUserStatus(currentUid); 
             } else {
-                showMsg('註冊失敗', res.message || '未知錯誤');
+                showMsg('註冊失敗', res.message || '請稍後再試');
                 document.getElementById('register-view').classList.remove('hidden');
             }
         }
 
+        // 6. 顯示賣場列表
         async function showMarketView(userData) {
             document.getElementById('user-name').innerText = userData.name || userData.group_name;
             document.getElementById('market-view').classList.remove('hidden');
 
             const listDiv = document.getElementById('market-list');
             
-            // 先顯示區塊內的 Loading
+            // 顯示局部 Loading
             listDiv.innerHTML = `
                 <div class="text-center py-5 fade-in">
                     <div class="spinner-border text-primary" role="status"></div>
@@ -331,57 +344,54 @@
                 </div>
             `;
 
-            try {
-                const res = await callApi('getMarkets', { uid: currentUid });
-                
-                // 強制清空內容，準備顯示結果
-                listDiv.innerHTML = ''; 
+            const res = await callApi('getMarkets', { uid: currentUid });
 
-                if (res.status === 'success' && res.data && res.data.length > 0) {
-                    let html = '';
-                    res.data.forEach(m => {
-                        html += `
-                            <div class="card mb-3 shadow-sm market-item border-0 fade-in">
-                                <div class="card-body p-4">
-                                    <h5 class="card-title fw-bold text-dark">
-                                        <i class="bi bi-shop me-2 text-primary"></i>${m.title || '專屬賣場'}
-                                    </h5>
-                                    <p class="card-text text-muted mb-3">${m.desc || '請點擊下方按鈕前往選購'}</p>
-                                    <a href="${m.link}" target="_blank" class="btn btn-outline-primary w-100 rounded-pill fw-bold">
-                                        前往下單 <i class="bi bi-box-arrow-up-right ms-1"></i>
-                                    </a>
-                                </div>
+            // ★ 強制清空 Loading，確保不會無限轉圈
+            listDiv.innerHTML = ''; 
+
+            if (res.status === 'success' && res.data && res.data.length > 0) {
+                // 有資料：顯示賣場卡片
+                let html = '';
+                res.data.forEach(m => {
+                    html += `
+                        <div class="card mb-3 shadow-sm market-item border-0 fade-in">
+                            <div class="card-body p-4">
+                                <h5 class="card-title fw-bold text-dark">
+                                    <i class="bi bi-shop me-2 text-primary"></i>${m.title || '專屬賣場'}
+                                </h5>
+                                <p class="card-text text-muted mb-3">${m.desc || '點擊下方按鈕前往選購'}</p>
+                                <a href="${m.link}" target="_blank" class="btn btn-outline-primary w-100 rounded-pill fw-bold">
+                                    前往下單 <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                </a>
                             </div>
-                        `;
-                    });
-                    listDiv.innerHTML = html;
-                } else {
-                    // --- 這裡就是解決「一直 Loading」的關鍵 ---
-                    // 當沒有資料時，明確顯示「尚無賣場」的提示
-                    listDiv.innerHTML = `
-                        <div class="text-center py-5 fade-in">
-                            <i class="bi bi-basket display-1 text-muted opacity-50"></i>
-                            <h5 class="mt-4 text-secondary">尚無您的賣場連結</h5>
-                            <p class="text-muted small px-4">
-                                請確認您輸入的「群內名稱」是否正確，<br>
-                                或是管理員尚未建立您的專屬賣場。
-                            </p>
-                            <button class="btn btn-sm btn-light mt-2" onclick="location.reload()">重新整理</button>
                         </div>
                     `;
-                }
-            } catch (err) {
-                // 發生錯誤時的顯示
+                });
+                listDiv.innerHTML = html;
+            } else {
+                // 無資料：顯示「尚無賣場」提示卡
                 listDiv.innerHTML = `
-                    <div class="text-center py-5 text-danger fade-in">
-                        <i class="bi bi-exclamation-circle display-1"></i>
-                        <p class="mt-3">資料載入失敗，請檢查網路連線。</p>
-                        <button class="btn btn-outline-danger btn-sm" onclick="showMarketView({name: '${userData.name}'})">重試</button>
+                    <div class="card border-0 shadow-sm mt-3 fade-in" style="background-color: #f8f9fa;">
+                        <div class="card-body text-center py-5">
+                            <i class="bi bi-basket display-4 text-secondary opacity-50"></i>
+                            <h5 class="mt-3 fw-bold text-secondary">尚無您的賣場連結</h5>
+                            <p class="text-muted small px-3 mt-2">
+                                目前系統查不到屬於「<span class="text-primary fw-bold">${userData.name}</span>」的賣場。<br>
+                                <br>
+                                可能原因：<br>
+                                1. 管理員尚未建立您的訂單<br>
+                                2. 群內名稱有誤 (需完全一致)
+                            </p>
+                            <button class="btn btn-primary btn-sm rounded-pill px-4 mt-2" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise me-1"></i>重新整理
+                            </button>
+                        </div>
                     </div>
                 `;
             }
         }
 
+        // 7. 通用彈窗函式
         function showMsg(title, message) {
             const modalEl = document.getElementById('infoModal');
             document.getElementById('infoModalTitle').innerText = title;
