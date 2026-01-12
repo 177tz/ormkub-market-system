@@ -21,15 +21,34 @@
 
         <div id="register-view" class="card p-4 hidden">
             <h3 class="text-center mb-4">第一次使用請註冊</h3>
+            
             <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" id="reg-email" class="form-control" placeholder="請輸入 Email">
+                <label class="form-label text-danger">* Email (不可重複)</label>
+                <input type="email" id="reg-email" class="form-control" placeholder="example@gmail.com">
             </div>
+
             <div class="mb-3">
-                <label class="form-label">群內名稱 (需完全一致)</label>
+                <label class="form-label text-danger">* 群內名稱 (務必與群組內完全相同)</label>
                 <input type="text" id="reg-name" class="form-control" placeholder="請輸入群組暱稱">
+                <small class="text-muted">注意：此名稱將作為查詢訂單的依據</small>
             </div>
-            <button onclick="doRegister()" class="btn btn-primary w-100">註冊並登入</button>
+
+            <div class="mb-3">
+                <label class="form-label">* 常用收件人姓名</label>
+                <input type="text" id="reg-receiver" class="form-control" placeholder="例如：王小明">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">* 聯絡電話</label>
+                <input type="tel" id="reg-phone" class="form-control" placeholder="0912345678">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">* 常用 7-11 門市名稱</label>
+                <input type="text" id="reg-store" class="form-control" placeholder="例如：公館門市">
+            </div>
+
+            <button onclick="doRegister()" class="btn btn-primary w-100 mt-3">確認註冊</button>
         </div>
 
         <div id="market-view" class="hidden">
@@ -102,27 +121,48 @@
 
         // 4. 執行註冊
         async function doRegister() {
-            const email = document.getElementById('reg-email').value;
-            const name = document.getElementById('reg-name').value;
+            // 取得所有欄位的值
+            const email = document.getElementById('reg-email').value.trim();
+            const name = document.getElementById('reg-name').value.trim(); // 去除前後空白
+            const receiver = document.getElementById('reg-receiver').value.trim();
+            const phone = document.getElementById('reg-phone').value.trim();
+            const store = document.getElementById('reg-store').value.trim();
             
-            if(!email || !name) return alert('請填寫完整資訊');
+            // 簡易前端驗證：檢查是否有空值
+            if(!email || !name || !receiver || !phone || !store) {
+                return alert('請填寫所有欄位，這些都是必填項目喔！');
+            }
 
+            // 顯示載入中，隱藏表單
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('register-view').classList.add('hidden');
 
             const payload = {
                 uid: currentUid,
                 email: email,
-                name: name
-                // 其他欄位可在此擴充
+                name: name,
+                receiver: receiver,
+                phone: phone,
+                store: store
             };
 
-            const res = await callApi('register', payload);
-            if(res.status === 'success') {
-                alert('註冊成功！');
-                checkUserStatus(currentUid); // 重新載入
-            } else {
-                alert('註冊失敗：' + res.message);
+            try {
+                const res = await callApi('register', payload);
+                
+                if(res.status === 'success') {
+                    alert('🎉 註冊成功！');
+                    // 重新檢查狀態，會自動進入賣場頁面
+                    checkUserStatus(currentUid); 
+                } else {
+                    // 後端傳回錯誤 (例如：Email 重複)
+                    alert('❌ ' + res.message); // 這裡會顯示 GAS 丟出的錯誤訊息
+                    
+                    // 恢復顯示表單，讓使用者修改
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('register-view').classList.remove('hidden');
+                }
+            } catch (err) {
+                alert('系統連線錯誤，請稍後再試。');
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('register-view').classList.remove('hidden');
             }
