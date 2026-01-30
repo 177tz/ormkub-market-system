@@ -48,6 +48,10 @@ async function checkUser(uid) {
 function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
+  // 🔥 新增這一行：更新公告
+  if(u.announcement) {
+      document.getElementById('sys-anno').innerText = u.announcement;
+  }
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
