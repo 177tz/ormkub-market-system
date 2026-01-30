@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>Ormkub｜系統更新中</title>
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --card: rgba(255,255,255,.06);
+      --card2: rgba(255,255,255,.04);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.68);
+      --muted2: rgba(255,255,255,.48);
+      --line: rgba(255,255,255,.12);
+      --accent: #7dd3fc;
+      --ok: #34d399;
+      --warn:#fbbf24;
+      --danger:#fb7185;
+      --shadow: 0 16px 50px rgba(0,0,0,.45);
+      --radius: 18px;
+      --radius2: 26px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Noto Sans TC", Segoe UI, Roboto, Helvetica, Arial;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% 10%, rgba(125,211,252,.12), transparent 55%),
+        radial-gradient(900px 600px at 85% 35%, rgba(52,211,153,.10), transparent 55%),
+        radial-gradient(1000px 700px at 60% 95%, rgba(251,113,133,.10), transparent 55%),
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .wrap{
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:22px 14px 28px;
+    }
+    .container{
+      width:min(520px, 100%);
+    }
+    .card{
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      border:1px solid var(--line);
+      border-radius: var(--radius2);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      min-width: 0;
+    }
+    .logo{
+      width:34px; height:34px; border-radius:12px;
+      background: radial-gradient(circle at 30% 30%, rgba(125,211,252,.9), rgba(125,211,252,.15) 55%, rgba(255,255,255,.06) 56%),
+                  linear-gradient(135deg, rgba(52,211,153,.25), rgba(251,113,133,.18));
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow: 0 10px 25px rgba(0,0,0,.35);
+      flex: 0 0 auto;
+    }
+    .brandtext{ min-width:0; }
+    .brandtext .name{
+      font-weight: 720;
+      letter-spacing: .2px;
+      font-size: 14px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    .brandtext .sub{
+      font-size: 12px;
+      color: var(--muted2);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.04);
+      font-size: 12px;
+      color: var(--muted);
+      flex: 0 0 auto;
+    }
+    .dot{
+      width:9px; height:9px; border-radius: 999px;
+      background: var(--warn);
+      box-shadow: 0 0 0 6px rgba(251,191,36,.12);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse{
+      0%,100%{ transform: scale(1); opacity: 1; }
+      50%{ transform: scale(1.15); opacity: .65; }
+    }
+
+    .content{ padding:18px 16px 16px; }
+    h1{
+      margin: 6px 0 6px;
+      font-size: 22px;
+      letter-spacing: .2px;
+      line-height: 1.25;
+    }
+    .lead{
+      margin:0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .panel{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: var(--radius);
+      padding: 12px 12px;
+      margin: 12px 0 12px;
+    }
+    .rows{ display:grid; gap:10px; }
+    .row{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .badge{
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+    }
+    .row .txt{ min-width:0; }
+    .row .title{
+      font-size: 13px;
+      margin: 0;
+      color: rgba(255,255,255,.86);
+      line-height: 1.35;
+      font-weight: 650;
+    }
+    .row .desc{
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted2);
+      line-height: 1.55;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .btn{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.88);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 650;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      cursor:pointer;
+      flex: 1 1 180px;
+      transition: transform .08s ease, background .12s ease, border-color .12s ease;
+      user-select:none;
+    }
+    .btn:active{ transform: translateY(1px); }
+    .btn.primary{
+      border-color: rgba(125,211,252,.35);
+      background: linear-gradient(180deg, rgba(125,211,252,.20), rgba(255,255,255,.06));
+    }
+    .btn .mini{
+      font-size: 12px;
+      color: var(--muted2);
+      font-weight: 600;
+      display:block;
+      margin-top: 2px;
+    }
+    .footer{
+      padding: 12px 16px 16px;
+      border-top:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color: var(--muted2);
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .footer a{
+      color: rgba(125,211,252,.9);
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(125,211,252,.35);
+    }
+    .small{
+      font-size: 12px;
+      color: var(--muted2);
+    }
+
+    /* 可選：讓畫面在 LIFF / iOS 看起來更像原生 */
+    .safe{
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-top: env(safe-area-inset-top);
+    }
+  </style>
+</head>
+
+<body class="safe">
+  <div class="wrap">
+    <div class="container">
+      <div class="card">
+        <div class="topbar">
+          <div class="brand">
+            <div class="logo" aria-hidden="true"></div>
+            <div class="brandtext">
+              <div class="name">Ormkub Member Dashboard</div>
+              <div class="sub">系統維護 / 資料更新中</div>
+            </div>
+          </div>
+
+          <div class="chip" title="Maintenance Mode">
+            <span class="dot" aria-hidden="true"></span>
+            更新中
+          </div>
+        </div>
+
+        <div class="content">
+          <h1>目前正在更新資料</h1>
+          <p class="lead">
+            我們正在同步最新訂單與貨況，期間查詢功能會暫時關閉。<br />
+            We’re updating data. The dashboard will be back shortly.
+          </p>
+
+          <div class="panel">
+            <div class="rows">
+              <div class="row">
+                <div class="badge" aria-hidden="true">🟡</div>
+                <div class="txt">
+                  <p class="title">更新期間你可以做什麼？</p>
+                  <p class="desc">請先稍後再重新開啟頁面，或到官方 LINE 私訊詢問。</p>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="badge" aria-hidden="true">🟢</div>
+                <div class="txt">
+                  <p class="title">資料不會不見</p>
+                  <p class="desc">所有訂單與狀態都會保留，更新完成後會顯示最新結果。</p>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="badge" aria-hidden="true">🔴</div>
+                <div class="txt">
+                  <p class="title">資料有誤怎麼辦？</p>
+                  <p class="desc">請直接私訊官方 LINE 提供：群內名稱 / 訂單編號 / 問題描述。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" id="reloadBtn" type="button">
+              重新整理
+              <span aria-hidden="true">↻</span>
+            </button>
+
+            <!-- 可選：把 # 改成你的官方 LINE 連結 / LIFF deep link -->
+            <a class="btn" href="#" id="lineBtn">
+              聯絡官方 LINE
+              <span aria-hidden="true">💬</span>
+            </a>
+          </div>
+
+          <p class="small" style="margin:12px 2px 0;">
+            小提醒：若你是從 LINE 內建瀏覽器開啟，更新完成後點「重新整理」最準。
+          </p>
+        </div>
+
+        <div class="footer">
+          <div>© <span id="year"></span> Ormkub</div>
+          <div>
+            狀態：<span id="statusText">Maintenance</span> ·
+            <span id="timeText"></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="small" style="text-align:center;">
+        若你看到此頁，代表系統正在同步資料，稍後再回來即可。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 基本資訊顯示 =====
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    function pad(n){ return String(n).padStart(2,'0'); }
+    function tick(){
+      const d = new Date();
+      const hh = pad(d.getHours());
+      const mm = pad(d.getMinutes());
+      document.getElementById("timeText").textContent = `更新中 · ${hh}:${mm}`;
+    }
+    tick();
+    setInterval(tick, 15000);
+
+    // ===== 按鈕：重新整理 =====
+    document.getElementById("reloadBtn").addEventListener("click", () => {
+      // 強制重新載入（避免快取）
+      const url = new URL(window.location.href);
+      url.searchParams.set("t", Date.now());
+      window.location.replace(url.toString());
+    });
+
+    // ===== 可選：官方 LINE 連結 =====
+    // 把下面改成你的官方 LINE OA 連結 (例如 line.me/R/ti/p/@xxxx 或 liff deep link)
+    const LINE_LINK = "https://ormkub.pse.is/LINEOA527";
+    const lineBtn = document.getElementById("lineBtn");
+    if (LINE_LINK && LINE_LINK !== "#") {
+      lineBtn.href = LINE_LINK;
+    } else {
+      // 若你還沒填，就先隱藏避免客人點到
+      lineBtn.style.display = "none";
+    }
+  </script>
+</body>
+</html>
