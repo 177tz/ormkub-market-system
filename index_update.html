@@ -244,20 +244,81 @@ async function loadOrders(uid) {
   try {
     const groups = await callApi('getOrders', {uid});
     loadedData.orders = true;
+
     if (!groups || groups.length === 0) {
-      div.innerHTML = `<div class="glass-card text-center py-5 fade-in"><i class="bi bi-bag-x display-4 text-muted opacity-50"></i><p class="mt-3 text-muted">尚無訂購紀錄</p></div>`;
+      div.innerHTML = `
+        <div class="glass-card text-center py-5 fade-in">
+          <i class="bi bi-bag-x display-4 text-muted opacity-50"></i>
+          <p class="mt-3 text-muted">尚無訂購紀錄</p>
+        </div>`;
       return;
     }
+
     div.innerHTML = groups.map(g => {
-      let details = (g.details && g.details.length) ? g.details.map(d => `<div class="item-row"><div><div class="item-name">${d.item}</div><div class="item-meta">${d.note}</div></div><span class="badge bg-light text-dark border">x${d.qty}</span></div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
+      // 1. 明細區塊
+      let details = (g.details && g.details.length) ? g.details.map(d => `
+        <div class="item-row">
+          <div>
+            <div class="item-name">${d.item}</div>
+            <div class="item-meta text-primary">${d.note || ''}</div>
+          </div>
+          <span class="badge bg-light text-dark border">x${d.qty}</span>
+        </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
+
+      // 2. 對帳區塊 (擴充顯示)
       let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
-        let cls = 'st-wait';
-        if(s.status.includes('✅')||s.status.includes('核對')) cls = 'st-ok';
-        else if(s.status.includes('❌')) cls = 'st-err';
-        else if(s.status.includes('貨到')) cls = 'st-cod';
-        return `<div class="d-flex justify-content-between align-items-center w-100"><div><small class="text-muted d-block">應付總額</small><strong class="fs-5">$${s.total}</strong></div><span class="status-pill ${cls}">${s.status}</span></div>`;
+        // 狀態顏色判斷
+        let cls = 'st-wait'; // 預設黃色
+        let st = s.status || '';
+        if(st.includes('✅') || st.includes('完成') || st.includes('OK')) cls = 'st-ok';
+        else if(st.includes('❌') || st.includes('有誤')) cls = 'st-err';
+        else if(st.includes('貨到')) cls = 'st-cod';
+
+        return `
+          <div class="border-top pt-3 mt-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+               <div>
+                 <span class="status-pill ${cls}">${st}</span>
+               </div>
+               <div class="text-end">
+                 <small class="text-muted d-block" style="font-size:0.7rem">應付總額</small>
+                 <strong class="text-danger fs-5">$${s.total}</strong>
+               </div>
+            </div>
+
+            <div class="row g-2 small text-muted bg-light p-2 rounded">
+              <div class="col-4">
+                <span class="d-block opacity-75" style="font-size:0.7rem">總件數</span>
+                <span class="fw-bold text-dark">${s.count || '-'}</span>
+              </div>
+              <div class="col-4">
+                <span class="d-block opacity-75" style="font-size:0.7rem">原價總額</span>
+                <span class="fw-bold text-dark">$${s.orig || '-'}</span>
+              </div>
+              <div class="col-4">
+                <span class="d-block opacity-75" style="font-size:0.7rem">實收金額</span>
+                <span class="fw-bold text-dark">$${s.actual || '-'}</span>
+              </div>
+              <div class="col-6 mt-2">
+                <span class="d-block opacity-75" style="font-size:0.7rem">後五碼</span>
+                <span class="fw-bold text-primary">${s.last5 || '未填'}</span>
+              </div>
+              <div class="col-6 mt-2 text-end">
+                <span class="d-block opacity-75" style="font-size:0.7rem">收款時間</span>
+                <span class="fw-bold text-dark">${s.time || '-'}</span>
+              </div>
+            </div>
+          </div>`;
       }).join('') : '<div class="text-center small text-muted">待核算</div>';
-      return `<div class="group-card fade-in"><div class="group-header"><div class="group-title"><i class="bi bi-folder-fill text-warning"></i> ${g.groupName}</div></div><div class="group-body">${details}</div><div class="group-footer">${summary}</div></div>`;
+
+      return `
+        <div class="group-card fade-in">
+          <div class="group-header">
+            <div class="group-title"><i class="bi bi-folder-fill text-warning"></i> ${g.groupName}</div>
+          </div>
+          <div class="group-body">${details}</div>
+          <div class="group-footer d-block">${summary}</div>
+        </div>`;
     }).join('');
   } catch(e) { div.innerHTML = '載入失敗，請刷新重試'; }
 }
