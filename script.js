@@ -124,16 +124,35 @@ async function loadOrders(uid) {
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳
+      // 2. 對帳區塊 (完整版)
       let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
-        let cls = 'status-wait';
-        let badgeCls = 'st-wait';
+        // --- A. 狀態顏色判斷 ---
+        let cls = 'status-wait'; // 卡片邊框色 (預設黃)
+        let badgeCls = 'st-wait'; // 狀態膠囊色 (預設黃)
         let st = s.status || '未標示';
-        if(st.includes('✅') || st.includes('完成') || st.includes('OK')) { cls = 'status-ok'; badgeCls = 'st-ok'; }
-        else if(st.includes('❌') || st.includes('有誤')) { cls = 'status-err'; badgeCls = 'st-err'; }
-        
+
+        // 成功類 (包含：核對無誤、完成、OK、面交)
+        if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('核對無誤') || st.includes('面交')) { 
+            cls = 'status-ok'; 
+            badgeCls = 'st-ok'; 
+        }
+        // 異常類 (包含：未收到、有誤、金額不符)
+        else if(st.includes('❌') || st.includes('有誤') || st.includes('未收到') || st.includes('不符')) { 
+            cls = 'status-err'; 
+            badgeCls = 'st-err'; 
+        }
+
+        // --- B. 備註顯示邏輯 ---
+        // 如果有備註 (s.note)，就顯示黃色區塊；沒有就顯示空字串
+        let noteHtml = s.note ? 
+          `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem">
+             <i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}
+           </div>` : '';
+
+        // --- C. HTML 模板 ---
         return `
           <div class="card-box order-card ${cls} mt-2 fade-in">
+            
             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
                <span class="status-badge ${badgeCls}">${st}</span>
                <div class="text-end">
@@ -141,17 +160,37 @@ async function loadOrders(uid) {
                  <span class="val-highlight">$${s.total}</span>
                </div>
             </div>
+
             <div class="summary-grid">
-              <div class="info-block"><span class="info-label">總件數</span><span class="info-val">${s.count || '-'}</span></div>
-              <div class="info-block"><span class="info-label">原價總額</span><span class="info-val">$${s.orig || '-'}</span></div>
-              <div class="info-block" style="grid-column: span 2;"><span class="info-label">實收金額</span><span class="info-val val-blue">$${s.actual || '-'}</span></div>
-              <div class="info-block"><span class="info-label">後五碼</span><span class="info-val">${s.last5 || '未填'}</span></div>
-              <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${s.time || '-'}</span></div>
+              <div class="info-block">
+                <span class="info-label">總件數</span>
+                <span class="info-val">${s.count || '-'}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">原價總額</span>
+                <span class="info-val">$${s.orig || '-'}</span>
+              </div>
+              <div class="info-block" style="grid-column: span 2;">
+                <span class="info-label">實收金額</span>
+                <span class="info-val val-blue">$${s.actual || '-'}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">後五碼</span>
+                <span class="info-val">${s.last5 || '未填'}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">收款時間</span>
+                <span class="info-val" style="font-size:0.8rem">${s.time || '-'}</span>
+              </div>
             </div>
+
+            ${noteHtml}
+
           </div>
         `;
       }).join('') : '<div class="text-center small text-muted">待核算</div>';
 
+      
       return `
         <div class="mb-4">
           <div class="group-name"><i class="bi bi-folder2-open text-primary"></i> ${g.groupName}</div>
