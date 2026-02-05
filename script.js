@@ -48,22 +48,60 @@ async function checkUser(uid) {
 function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
-  // 🔥 新增這一行：更新公告
-  if(u.announcement) {
-      document.getElementById('sys-anno').innerText = u.announcement;
+  
+  // ===========================================
+  // 🔥 多則公告渲染邏輯
+  // ===========================================
+  const annoBox = document.getElementById('announcement-container');
+  if (u.announcements && u.announcements.length > 0) {
+    
+    // 產生 HTML
+    annoBox.innerHTML = u.announcements.map(a => {
+      // 根據類型決定顏色
+      let colorClass = 'border-primary text-primary'; // info
+      let icon = 'bi-info-circle-fill';
+      let bgClass = 'bg-primary';
+
+      if (a.type === 'alert') {
+        colorClass = 'border-danger text-danger';
+        icon = 'bi-exclamation-triangle-fill';
+        bgClass = 'bg-danger';
+      } else if (a.type === 'success') {
+        colorClass = 'border-success text-success';
+        icon = 'bi-check-circle-fill';
+        bgClass = 'bg-success';
+      }
+
+      return `
+        <div class="card-box mb-3 fade-in" style="border-left: 5px solid; border-color: inherit;">
+          <div class="${colorClass}">
+            <h6 class="fw-bold mb-2">
+              <i class="bi ${icon} me-2"></i>${a.title}
+            </h6>
+            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5;">
+              ${a.content}
+            </p>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } else {
+    // 如果完全沒有公告，可以隱藏或顯示預設文字
+    annoBox.innerHTML = `
+      <div class="card-box">
+        <h6 class="fw-bold text-muted mb-2"><i class="bi bi-megaphone-fill"></i> 最新公告</h6>
+        <p class="small text-muted mb-0">目前沒有新公告。</p>
+      </div>`;
   }
+  // ===========================================
+
+  // Profile Tab 資料
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
   document.getElementById('p-receiver').innerText = u.name;
   document.getElementById('p-store').innerText = u.store;
-}
-
-async function doRegister() {
-  const vals = ['email','name','receiver','phone','store'].reduce((a,k)=>{a[k]=document.getElementById('reg-'+k).value;return a},{});
-  showLoading();
-  try { await callApi('register', {...vals, uid:currentUid}); location.reload(); }
-  catch(e) { hideLoading(); alert(e.message); }
 }
 
 // ================= 頁面切換 =================
