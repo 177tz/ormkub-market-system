@@ -94,10 +94,10 @@ function renderProfile(u) {
   // ===========================================
   const annoBox = document.getElementById('announcement-container');
   if (u.announcements && u.announcements.length > 0) {
+    
     annoBox.innerHTML = u.announcements.map(a => {
       let colorClass = 'border-primary text-primary'; 
       let icon = 'bi-info-circle-fill';
-      let bgClass = 'bg-primary'; // 備用
 
       if (a.type === 'alert') {
         colorClass = 'border-danger text-danger';
@@ -110,11 +110,15 @@ function renderProfile(u) {
       return `
         <div class="card-box mb-3 fade-in" style="border-left: 5px solid; border-color: inherit;">
           <div class="${colorClass}">
-            <h6 class="fw-bold mb-2"><i class="bi ${icon} me-2"></i>${a.title}</h6>
-            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5;">${a.content}</p>
+            <h6 class="fw-bold mb-2">
+              <i class="bi ${icon} me-2"></i>${a.title}
+            </h6>
+            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5; white-space: pre-wrap;">${a.content}</p>
           </div>
-        </div>`;
+        </div>
+      `;
     }).join('');
+
   } else {
     annoBox.innerHTML = `
       <div class="card-box">
