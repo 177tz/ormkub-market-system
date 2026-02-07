@@ -1,21 +1,36 @@
 // ================= 設定區 =================
 const CONFIG = {
-  // 您的 GAS 部署網址 (分拆版)
+  // 您的 GAS 部署網址
   API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
   // 您的 LIFF ID
-  LIFF_ID: '2008873691-AM28m7jo' 
+  LIFF_ID: '2008873691-AM28m7jo'
 };
+
+// 🔹 這裡設定版本號，改這裡 HTML 就會跟著變
+const APP_VERSION = 'v2.5.1 (2026.02.05)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 
 // ================= 初始化 =================
 window.onload = async () => {
+  // 顯示版本號
+  const vEl = document.getElementById('app-version-display');
+  if(vEl) vEl.innerText = APP_VERSION;
+
   try {
     await liff.init({ liffId: CONFIG.LIFF_ID });
-    if (!liff.isLoggedIn()) { liff.login(); return; }
+    
+    // 電腦版開發測試用 (如果沒登入 LIFF)
+    if (!liff.isLoggedIn()) { 
+      liff.login(); 
+      return; 
+    }
+    
     currentUid = (await liff.getProfile()).userId;
+    console.log("Current UID:", currentUid); // Debug
     await checkUser(currentUid);
+
   } catch (e) { 
     console.error(e); 
     hideLoading(); 
@@ -45,6 +60,31 @@ async function checkUser(uid) {
   } catch (e) { alert(e.message); }
 }
 
+// 🔥【修復】註冊函式：確保按鈕有反應
+async function doRegister() {
+  const ids = ['email','name','receiver','phone','store'];
+  let vals = {};
+  
+  // 檢查所有欄位
+  for (let k of ids) {
+    let el = document.getElementById('reg-' + k);
+    if (!el) { alert('系統錯誤：找不到欄位 ' + k); return; }
+    if (!el.value.trim()) { alert('請填寫所有欄位'); return; }
+    vals[k] = el.value.trim();
+  }
+
+  showLoading();
+  try { 
+    await callApi('register', {...vals, uid:currentUid}); 
+    alert('綁定成功！');
+    location.reload(); 
+  }
+  catch(e) { 
+    hideLoading(); 
+    alert('綁定失敗: ' + e.message); 
+  }
+}
+
 function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
@@ -54,40 +94,28 @@ function renderProfile(u) {
   // ===========================================
   const annoBox = document.getElementById('announcement-container');
   if (u.announcements && u.announcements.length > 0) {
-    
-    // 產生 HTML
     annoBox.innerHTML = u.announcements.map(a => {
-      // 根據類型決定顏色
-      let colorClass = 'border-primary text-primary'; // info
+      let colorClass = 'border-primary text-primary'; 
       let icon = 'bi-info-circle-fill';
-      let bgClass = 'bg-primary';
+      let bgClass = 'bg-primary'; // 備用
 
       if (a.type === 'alert') {
         colorClass = 'border-danger text-danger';
         icon = 'bi-exclamation-triangle-fill';
-        bgClass = 'bg-danger';
       } else if (a.type === 'success') {
         colorClass = 'border-success text-success';
         icon = 'bi-check-circle-fill';
-        bgClass = 'bg-success';
       }
 
       return `
         <div class="card-box mb-3 fade-in" style="border-left: 5px solid; border-color: inherit;">
           <div class="${colorClass}">
-            <h6 class="fw-bold mb-2">
-              <i class="bi ${icon} me-2"></i>${a.title}
-            </h6>
-            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5;">
-              ${a.content}
-            </p>
+            <h6 class="fw-bold mb-2"><i class="bi ${icon} me-2"></i>${a.title}</h6>
+            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5;">${a.content}</p>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
-
   } else {
-    // 如果完全沒有公告，可以隱藏或顯示預設文字
     annoBox.innerHTML = `
       <div class="card-box">
         <h6 class="fw-bold text-muted mb-2"><i class="bi bi-megaphone-fill"></i> 最新公告</h6>
@@ -96,7 +124,6 @@ function renderProfile(u) {
   }
   // ===========================================
 
-  // Profile Tab 資料
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
@@ -106,15 +133,15 @@ function renderProfile(u) {
 
 // ================= 頁面切換 =================
 function switchTab(tab, btn) {
-  // UI 更新：先移除所有按鈕的 active，再將點擊的按鈕加上 active
+  // UI 更新
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   
-  // 內容更新：先隱藏所有區塊，再顯示目標區塊
+  // 區塊切換
   document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
 
-  // Lazy Load
+  // Lazy Load (只在第一次點擊時載入)
   if (tab === 'markets' && !loadedData.markets) loadMarkets(currentUid);
   if (tab === 'orders' && !loadedData.orders) loadOrders(currentUid);
 }
@@ -162,35 +189,27 @@ async function loadOrders(uid) {
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳區塊 (完整版)
+      // 2. 對帳區塊 (含備註與詳細資訊)
       let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
-        // --- A. 狀態顏色判斷 ---
-        let cls = 'status-wait'; // 卡片邊框色 (預設黃)
-        let badgeCls = 'st-wait'; // 狀態膠囊色 (預設黃)
+        let cls = 'status-wait';
+        let badgeCls = 'st-wait';
         let st = s.status || '未標示';
 
-        // 成功類 (包含：核對無誤、完成、OK、面交)
+        // 狀態判斷
         if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('核對無誤') || st.includes('面交')) { 
-            cls = 'status-ok'; 
-            badgeCls = 'st-ok'; 
-        }
-        // 異常類 (包含：未收到、有誤、金額不符)
-        else if(st.includes('❌') || st.includes('有誤') || st.includes('未收到') || st.includes('不符')) { 
-            cls = 'status-err'; 
-            badgeCls = 'st-err'; 
+            cls = 'status-ok'; badgeCls = 'st-ok'; 
+        } else if(st.includes('❌') || st.includes('有誤') || st.includes('未收到') || st.includes('不符')) { 
+            cls = 'status-err'; badgeCls = 'st-err'; 
         }
 
-        // --- B. 備註顯示邏輯 ---
-        // 如果有備註 (s.note)，就顯示黃色區塊；沒有就顯示空字串
+        // 🔥 備註顯示邏輯
         let noteHtml = s.note ? 
           `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem">
              <i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}
            </div>` : '';
 
-        // --- C. HTML 模板 ---
         return `
           <div class="card-box order-card ${cls} mt-2 fade-in">
-            
             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
                <span class="status-badge ${badgeCls}">${st}</span>
                <div class="text-end">
@@ -200,35 +219,18 @@ async function loadOrders(uid) {
             </div>
 
             <div class="summary-grid">
-              <div class="info-block">
-                <span class="info-label">總件數</span>
-                <span class="info-val">${s.count || '-'}</span>
-              </div>
-              <div class="info-block">
-                <span class="info-label">原價總額</span>
-                <span class="info-val">$${s.orig || '-'}</span>
-              </div>
-              <div class="info-block" style="grid-column: span 2;">
-                <span class="info-label">實收金額</span>
-                <span class="info-val val-blue">$${s.actual || '-'}</span>
-              </div>
-              <div class="info-block">
-                <span class="info-label">後五碼</span>
-                <span class="info-val">${s.last5 || '未填'}</span>
-              </div>
-              <div class="info-block">
-                <span class="info-label">收款時間</span>
-                <span class="info-val" style="font-size:0.8rem">${s.time || '-'}</span>
-              </div>
+              <div class="info-block"><span class="info-label">總件數</span><span class="info-val">${s.count || '-'}</span></div>
+              <div class="info-block"><span class="info-label">原價總額</span><span class="info-val">$${s.orig || '-'}</span></div>
+              <div class="info-block" style="grid-column: span 2;"><span class="info-label">實收金額</span><span class="info-val val-blue">$${s.actual || '-'}</span></div>
+              <div class="info-block"><span class="info-label">後五碼</span><span class="info-val">${s.last5 || '未填'}</span></div>
+              <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${s.time || '-'}</span></div>
             </div>
 
             ${noteHtml}
-
           </div>
         `;
       }).join('') : '<div class="text-center small text-muted">待核算</div>';
 
-      
       return `
         <div class="mb-4">
           <div class="group-name"><i class="bi bi-folder2-open text-primary"></i> ${g.groupName}</div>
@@ -239,7 +241,7 @@ async function loadOrders(uid) {
   } catch(e) { div.innerHTML = '載入失敗，請刷新重試'; }
 }
 
-// Helper
+// Helper UI functions
 function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
 function showLoading() { document.getElementById('loading-overlay').classList.remove('hidden'); }
 function showView(id) {
