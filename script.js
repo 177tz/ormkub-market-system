@@ -168,7 +168,22 @@ async function loadMarkets(uid) {
   } catch(e) { div.innerHTML = '載入失敗'; }
 }
 
-// ================= 資料載入：訂單 =================
+
+// ================= ✅ 手風琴切換功能 =================
+function toggleGroup(header) {
+  // 1. 旋轉箭頭
+  header.classList.toggle('active');
+  
+  // 2. 顯示/隱藏內容 (找出下一個兄弟元素)
+  const content = header.nextElementSibling;
+  if (content.style.display === 'block') {
+    content.style.display = 'none';
+  } else {
+    content.style.display = 'block';
+  }
+}
+
+// ================= 資料載入：訂單 (手風琴版) =================
 async function loadOrders(uid) {
   const div = document.getElementById('orders-container');
   div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -182,14 +197,12 @@ async function loadOrders(uid) {
       return;
     }
 
-    // ✨ 小工具：美化時間格式 (把 ISO 時間轉成 MM/dd HH:mm)
+    // ✨ 時間格式化工具
     const formatTime = (t) => {
       if (!t) return '-';
       try {
         let d = new Date(t);
-        // 如果不是有效日期，就直接回傳原本的字串
         if (isNaN(d.getTime())) return t; 
-        // 格式化：月/日 時:分
         return (d.getMonth()+1).toString().padStart(2,'0') + '/' + 
                d.getDate().toString().padStart(2,'0') + ' ' + 
                d.getHours().toString().padStart(2,'0') + ':' + 
@@ -197,8 +210,14 @@ async function loadOrders(uid) {
       } catch(e) { return t; }
     };
 
-    div.innerHTML = groups.map(g => {
-      // 1. 明細
+    // 產生 HTML
+    div.innerHTML = groups.map((g, index) => {
+      // 判斷是否為第一筆 (最新的)，如果是，就預設展開
+      const isFirst = index === 0;
+      const displayStyle = isFirst ? 'block' : 'none';
+      const activeClass = isFirst ? 'active' : '';
+
+      // 1. 明細 HTML
       let details = (g.details && g.details.length) ? g.details.map(d => `
         <div class="item-row">
           <div>
@@ -208,26 +227,23 @@ async function loadOrders(uid) {
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳區塊
+      // 2. 對帳 HTML
       let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
         let cls = 'status-wait';
         let badgeCls = 'st-wait';
         let st = s.status || '未標示';
 
-        // 狀態判斷
         if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('核對無誤') || st.includes('面交')) { 
             cls = 'status-ok'; badgeCls = 'st-ok'; 
         } else if(st.includes('❌') || st.includes('有誤') || st.includes('未收到') || st.includes('不符')) { 
             cls = 'status-err'; badgeCls = 'st-err'; 
         }
 
-        // 🔥 備註顯示邏輯 (加入 white-space: pre-wrap 支援換行)
         let noteHtml = s.note ? 
           `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;">
              <i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}
            </div>` : '';
 
-        // ✨ 使用 formatTime 美化時間
         let prettyTime = formatTime(s.time);
 
         return `
@@ -239,26 +255,36 @@ async function loadOrders(uid) {
                  <span class="val-highlight">$${s.total}</span>
                </div>
             </div>
-
             <div class="summary-grid">
               <div class="info-block"><span class="info-label">總件數</span><span class="info-val">${s.count || '-'}</span></div>
               <div class="info-block"><span class="info-label">原價總額</span><span class="info-val">$${s.orig || '-'}</span></div>
               <div class="info-block" style="grid-column: span 2;"><span class="info-label">實收金額</span><span class="info-val val-blue">$${s.actual || '-'}</span></div>
               <div class="info-block"><span class="info-label">後五碼</span><span class="info-val">${s.last5 || '未填'}</span></div>
-              
               <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${prettyTime}</span></div>
             </div>
-
             ${noteHtml}
           </div>
         `;
       }).join('') : '<div class="text-center small text-muted">待核算</div>';
 
+      // 🔥 這裡改成了手風琴結構
       return `
-        <div class="mb-4">
-          <div class="group-name"><i class="bi bi-folder2-open text-primary"></i> ${g.groupName}</div>
-          <div class="card-box p-0 overflow-hidden"><div class="item-list m-0 rounded-0">${details}</div></div>
-          ${summary}
+        <div class="mb-3 border-bottom pb-3">
+          
+          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
+            <div class="group-name mb-0">
+              <i class="bi bi-folder2-open text-primary me-2"></i> ${g.groupName}
+            </div>
+            <i class="bi bi-chevron-down toggle-icon"></i>
+          </div>
+
+          <div class="group-content" style="display: ${displayStyle};">
+            <div class="card-box p-0 overflow-hidden mt-2">
+              <div class="item-list m-0 rounded-0 border-0">${details}</div>
+            </div>
+            ${summary}
+          </div>
+
         </div>`;
     }).join('');
   } catch(e) { div.innerHTML = '載入失敗，請刷新重試'; }
