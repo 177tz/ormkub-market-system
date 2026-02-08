@@ -144,3 +144,43 @@ body {
   margin-bottom: 15px; outline: none; transition: 0.3s;
 }
 .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(74,144,226,0.1); }
+
+/* =========================================
+   手風琴開合效果
+   ========================================= */
+/* 標題列：變成可點擊的樣子 */
+.group-header-clickable {
+  cursor: pointer;
+  padding: 10px 5px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.group-header-clickable:active {
+  background-color: rgba(0,0,0,0.05);
+}
+
+/* 箭頭圖示動畫 */
+.toggle-icon {
+  transition: transform 0.3s ease;
+  color: #b2bec3;
+}
+/* 當被加上 active 類別時，箭頭旋轉 */
+.group-header-clickable.active .toggle-icon {
+  transform: rotate(180deg);
+}
+
+/* 內容區塊：預設隱藏 */
+.group-content {
+  display: none; /* 預設隱藏 */
+  margin-top: 10px;
+  animation: slideDown 0.3s ease-out;
+}
+
+/* 下滑動畫 */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
