@@ -182,6 +182,21 @@ async function loadOrders(uid) {
       return;
     }
 
+    // ✨ 小工具：美化時間格式 (把 ISO 時間轉成 MM/dd HH:mm)
+    const formatTime = (t) => {
+      if (!t) return '-';
+      try {
+        let d = new Date(t);
+        // 如果不是有效日期，就直接回傳原本的字串
+        if (isNaN(d.getTime())) return t; 
+        // 格式化：月/日 時:分
+        return (d.getMonth()+1).toString().padStart(2,'0') + '/' + 
+               d.getDate().toString().padStart(2,'0') + ' ' + 
+               d.getHours().toString().padStart(2,'0') + ':' + 
+               d.getMinutes().toString().padStart(2,'0');
+      } catch(e) { return t; }
+    };
+
     div.innerHTML = groups.map(g => {
       // 1. 明細
       let details = (g.details && g.details.length) ? g.details.map(d => `
@@ -193,7 +208,7 @@ async function loadOrders(uid) {
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳區塊 (含備註與詳細資訊)
+      // 2. 對帳區塊
       let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
         let cls = 'status-wait';
         let badgeCls = 'st-wait';
@@ -206,11 +221,14 @@ async function loadOrders(uid) {
             cls = 'status-err'; badgeCls = 'st-err'; 
         }
 
-        // 🔥 備註顯示邏輯
+        // 🔥 備註顯示邏輯 (加入 white-space: pre-wrap 支援換行)
         let noteHtml = s.note ? 
-          `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem">
+          `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;">
              <i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}
            </div>` : '';
+
+        // ✨ 使用 formatTime 美化時間
+        let prettyTime = formatTime(s.time);
 
         return `
           <div class="card-box order-card ${cls} mt-2 fade-in">
@@ -227,7 +245,8 @@ async function loadOrders(uid) {
               <div class="info-block"><span class="info-label">原價總額</span><span class="info-val">$${s.orig || '-'}</span></div>
               <div class="info-block" style="grid-column: span 2;"><span class="info-label">實收金額</span><span class="info-val val-blue">$${s.actual || '-'}</span></div>
               <div class="info-block"><span class="info-label">後五碼</span><span class="info-val">${s.last5 || '未填'}</span></div>
-              <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${s.time || '-'}</span></div>
+              
+              <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${prettyTime}</span></div>
             </div>
 
             ${noteHtml}
