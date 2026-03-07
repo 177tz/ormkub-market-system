@@ -160,7 +160,6 @@ async function loadOrders(uid) {
     };
 
     div.innerHTML = groups.map((g, index) => {
-      // 邏輯：第一筆(最新)展開，其他收合
       const isFirst = index === 0;
       const displayStyle = isFirst ? 'block' : 'none';
       const activeClass = isFirst ? 'active' : '';
@@ -181,10 +180,10 @@ async function loadOrders(uid) {
         let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
         let prettyTime = formatTime(s.time);
 
-        // 匯款按鈕 (如果有 form_link)
-        let actionBtn = s.form_link ? `
+        // 🔥 這裡把 s.form_link 修正為 s.formLink
+        let actionBtn = s.formLink ? `
           <div class="mt-3">
-            <a href="${s.form_link}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
+            <a href="${s.formLink}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
           </div>
         ` : '';
 
@@ -220,7 +219,7 @@ async function loadOrders(uid) {
           </div>`;
       }).join('') : '<div class="text-center small text-muted">待核算</div>';
 
-      // 🔥 手風琴結構
+      // 手風琴結構
       return `
         <div class="card-box order-card fade-in">
           <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
