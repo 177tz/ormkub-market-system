@@ -6,7 +6,7 @@ const CONFIG = {
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
-const APP_VERSION = 'v5.0.0 (Bank Transaction)';
+const APP_VERSION = 'v6.0.0 (Premium Dark)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
@@ -83,26 +83,42 @@ function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
   
+  // ===========================================
+  // 1. 首頁公告 (情報通知中心風格)
+  // ===========================================
   const annoBox = document.getElementById('announcement-container');
   if (u.announcements && u.announcements.length > 0) {
     annoBox.innerHTML = u.announcements.map(a => {
-      let colorClass = 'border-primary text-primary'; 
+      let typeClass = 'type-info'; 
       let icon = 'bi-info-circle-fill';
-      if (a.type === 'alert') { colorClass = 'border-danger text-danger'; icon = 'bi-exclamation-triangle-fill'; } 
-      else if (a.type === 'success') { colorClass = 'border-success text-success'; icon = 'bi-check-circle-fill'; }
+      
+      if (a.type === 'alert') { 
+        typeClass = 'type-alert'; 
+        icon = 'bi-exclamation-triangle-fill'; 
+      } else if (a.type === 'success') { 
+        typeClass = 'type-success'; 
+        icon = 'bi-check-circle-fill'; 
+      }
 
       return `
-        <div class="card-box mb-3 fade-in" style="border-left: 5px solid; border-color: inherit;">
-          <div class="${colorClass}">
-            <h6 class="fw-bold mb-2"><i class="bi ${icon} me-2"></i>${a.title}</h6>
-            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5; white-space: pre-wrap;">${a.content}</p>
+        <div class="anno-card ${typeClass} fade-in">
+          <div class="anno-title">
+            <i class="bi ${icon}"></i> ${a.title}
           </div>
+          <div class="anno-content">${a.content}</div>
         </div>`;
     }).join('');
   } else {
-    annoBox.innerHTML = `<div class="card-box"><h6 class="fw-bold text-muted mb-2">最新公告</h6><p class="small text-muted mb-0">目前沒有新公告。</p></div>`;
+    annoBox.innerHTML = `
+      <div class="anno-card type-info">
+        <div class="anno-title"><i class="bi bi-megaphone-fill"></i> 最新公告</div>
+        <div class="anno-content">目前沒有新公告。</div>
+      </div>`;
   }
 
+  // ===========================================
+  // 3. 個人資料 (虛擬黑卡 + iOS 設定頁)
+  // ===========================================
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
@@ -121,7 +137,7 @@ function switchTab(tab, btn) {
   if (tab === 'orders' && !loadedData.orders) loadOrders(currentUid);
 }
 
-// ================= 資料載入：賣場 =================
+// ================= 資料載入：賣場 (VIP 專屬通行證) =================
 async function loadMarkets(uid) {
   const div = document.getElementById('market-list');
   div.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>';
@@ -130,8 +146,11 @@ async function loadMarkets(uid) {
     loadedData.markets = true; 
     div.innerHTML = mkts.length ? mkts.map(m => `
       <a href="${m.link}" target="_blank" class="btn-market fade-in">
-        <div><h6 class="mb-0 fw-bold" style="color:var(--primary-dark)">${m.sheetName}</h6><small class="text-muted">${m.desc||'點擊前往'}</small></div>
-        <i class="bi bi-chevron-right text-muted"></i>
+        <div class="market-info">
+          <h6>${m.sheetName}</h6>
+          <small>${m.desc||'點擊前往專屬賣場'}</small>
+        </div>
+        <i class="bi bi-chevron-right"></i>
       </a>`).join('') : '<div class="text-center text-muted p-4">目前無專屬賣場</div>';
   } catch(e) { div.innerHTML = '載入失敗'; }
 }
