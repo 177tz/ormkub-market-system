@@ -27,7 +27,7 @@
         <h5>Hello, <span id="header-name">Member</span></h5>
         <p><span id="header-group">讀取中...</span></p>
       </div>
-      <button onclick="location.reload()" class="btn btn-sm btn-light rounded-pill px-3 shadow-sm" style="color: var(--primary); font-weight: 600;">
+      <button onclick="location.reload()" class="btn-update">
         <i class="bi bi-arrow-clockwise"></i> 更新
       </button>
     </div>
@@ -80,7 +80,8 @@
       </div>
 
       <div id="tab-orders" class="content-section hidden fade-in">
-        <div id="orders-container"></div>
+        <!-- 這裡加入 transaction-list 容器，讓裡面的橫列包在同一個大框框裡 -->
+        <div id="orders-container" class="transaction-list"></div>
       </div>
 
       <div id="tab-profile" class="content-section hidden fade-in">
