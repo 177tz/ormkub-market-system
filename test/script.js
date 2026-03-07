@@ -6,7 +6,7 @@ const CONFIG = {
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
-const APP_VERSION = 'v3.0.0 (iOS Native)';
+const APP_VERSION = 'v5.0.0 (Bank Transaction)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
@@ -136,7 +136,7 @@ async function loadMarkets(uid) {
   } catch(e) { div.innerHTML = '載入失敗'; }
 }
 
-// ================= 資料載入：訂單 (含開合) =================
+// ================= 資料載入：訂單 (存摺風) =================
 async function loadOrders(uid) {
   const div = document.getElementById('orders-container');
   div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -160,75 +160,95 @@ async function loadOrders(uid) {
     };
 
     div.innerHTML = groups.map((g, index) => {
+      // 邏輯：第一筆(最新)展開，其他收合
       const isFirst = index === 0;
       const displayStyle = isFirst ? 'block' : 'none';
       const activeClass = isFirst ? 'active' : '';
 
-      // 1. 明細
+      // 1. 明細 HTML
       let details = (g.details && g.details.length) ? g.details.map(d => `
         <div class="item-row">
-          <div><div class="item-name">${d.item}</div>${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}</div>
+          <div>
+            <div class="item-name">${d.item}</div>
+            ${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}
+          </div>
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳
-      let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
-        let badgeCls = 'st-wait'; let st = s.status || '未標示';
-        if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('面交')) { badgeCls = 'st-ok'; }
-        else if(st.includes('❌') || st.includes('有誤') || st.includes('不符')) { badgeCls = 'st-err'; }
+      // 2. 對帳 HTML 與 橫列外觀
+      let summaryHtml = '';
+      let rowTotal = '0';
+      let rowStatus = '未標示';
+      let badgeCls = 'st-wait';
+      let rowDate = '-';
+      
+      if (g.summary && g.summary.length > 0) {
+        let s = g.summary[0]; // 取第一筆對帳資料
+        rowTotal = s.total;
+        rowStatus = s.status || '未標示';
+        rowDate = formatTime(s.time);
+        
+        if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
+        else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
 
         let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
-        let prettyTime = formatTime(s.time);
-
-        // 🔥 這裡把 s.form_link 修正為 s.formLink
+        
         let actionBtn = s.formLink ? `
           <div class="mt-3">
             <a href="${s.formLink}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
           </div>
         ` : '';
 
-        return `
-          <div class="mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-               <span class="status-badge ${badgeCls}">${st}</span>
-               <div class="text-end">
-                 <span class="val-highlight">$${s.total}</span>
-               </div>
+        summaryHtml = `
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">總件數</span>
+              <span class="info-value">${s.count || '-'} 件</span>
             </div>
-            
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">總件數</span>
-                <span class="info-value">${s.count || '-'} 件</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">實收金額</span>
-                <span class="info-value val-blue">$${s.actual || '-'}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">後五碼</span>
-                <span class="info-value">${s.last5 || '未填'}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">收款時間</span>
-                <span class="info-value">${prettyTime}</span>
-              </div>
+            <div class="info-item">
+              <span class="info-label">實收金額</span>
+              <span class="info-value val-blue">$${s.actual || '-'}</span>
             </div>
-            ${noteHtml}
-            ${actionBtn}
-          </div>`;
-      }).join('') : '<div class="text-center small text-muted">待核算</div>';
-
-      // 手風琴結構
-      return `
-        <div class="card-box order-card fade-in">
-          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
-            <div class="group-name"><i class="bi bi-bag-check-fill text-primary"></i> ${g.groupName}</div>
-            <i class="bi bi-chevron-down toggle-icon"></i>
+            <div class="info-item">
+              <span class="info-label">後五碼</span>
+              <span class="info-value">${s.last5 || '未填'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">收款時間</span>
+              <span class="info-value">${rowDate}</span>
+            </div>
           </div>
+          ${noteHtml}
+          ${actionBtn}
+        `;
+      } else {
+        summaryHtml = '<div class="text-center small text-muted">待核算</div>';
+      }
+
+      // 🔥 Apple Wallet 存摺風 橫列結構
+      return `
+        <div class="transaction-row fade-in">
+          <!-- 橫列標題 (點擊展開) -->
+          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
+            <div class="tx-left">
+              <div class="tx-icon">
+                <i class="bi bi-bag-check"></i>
+              </div>
+              <div class="tx-title">
+                <span class="group-name">${g.groupName}</span>
+                <span class="tx-date">${rowDate}</span>
+              </div>
+            </div>
+            <div class="tx-right">
+              <span class="tx-amount">$${rowTotal}</span>
+              <span class="status-badge ${badgeCls}">${rowStatus}</span>
+            </div>
+          </div>
+          
+          <!-- 抽屜內容 (預設隱藏) -->
           <div class="group-content" style="display: ${displayStyle};">
             <div class="item-list">${details}</div>
-            ${summary}
+            ${summaryHtml}
           </div>
         </div>`;
     }).join('');
