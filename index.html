@@ -27,13 +27,13 @@
         <h5>Hello, <span id="header-name">Member</span></h5>
         <p><span id="header-group">讀取中...</span></p>
       </div>
-      <button onclick="location.reload()" class="btn btn-sm btn-light rounded-pill px-3 shadow-sm">
+      <button onclick="location.reload()" class="btn-update">
         <i class="bi bi-arrow-clockwise"></i> 更新
       </button>
     </div>
   </div>
 
-  <div id="register-view" class="container hidden fade-in" style="margin-top: -40px; position:relative; z-index:20;">
+  <div id="register-view" class="container hidden fade-in" style="margin-top: 20px; position:relative; z-index:20;">
     <div class="card-box">
       <h4 class="fw-bold text-center mb-4">會員綁定</h4>
       <p class="text-center text-muted small mb-4">請填寫正確資料以啟用查詢功能</p>
@@ -60,21 +60,14 @@
           <input type="text" id="reg-store" class="form-input" required placeholder="7-11 門市名稱">
         </div>
         
-        <button type="submit" class="btn-gradient mt-2">確認綁定</button>
+        <button type="submit" class="action-btn mt-2">確認綁定</button>
       </form>
     </div>
   </div>
 
   <div id="dashboard-view" class="hidden">
     
-    <div class="nav-container fade-in" style="animation-delay: 0.1s;">
-      <button class="nav-btn active" onclick="switchTab('home', this)"><i class="bi bi-house-door-fill"></i> 首頁</button>
-      <button class="nav-btn" onclick="switchTab('markets', this)"><i class="bi bi-bag-heart-fill"></i> 賣場</button>
-      <button class="nav-btn" onclick="switchTab('orders', this)"><i class="bi bi-receipt"></i> 訂單</button>
-      <button class="nav-btn" onclick="switchTab('profile', this)"><i class="bi bi-person-circle"></i> 資料</button>
-    </div>
-
-    <div class="container pb-5">
+    <div class="container pb-5 pt-3">
       
       <div id="tab-home" class="content-section fade-in">
         <div id="announcement-container">
@@ -87,33 +80,44 @@
       </div>
 
       <div id="tab-orders" class="content-section hidden fade-in">
-        <div id="orders-container"></div>
+        <div id="orders-container" class="transaction-list"></div>
       </div>
 
       <div id="tab-profile" class="content-section hidden fade-in">
-        <div class="card-box">
-          <div class="d-flex justify-content-between py-2 border-bottom">
-            <span class="text-muted small">群內名稱</span><span class="fw-bold" id="p-group">-</span>
+        
+        <!-- 虛擬黑卡 -->
+        <div class="virtual-black-card">
+          <div class="card-chip"></div>
+          <div class="card-name-label">MEMBER NAME</div>
+          <div class="card-name-value" id="p-group">-</div>
+        </div>
+
+        <!-- iOS 設定頁風格列表 -->
+        <div class="inset-list">
+          <div class="list-row">
+            <span class="list-label">Email</span>
+            <span class="list-value" id="p-email">-</span>
           </div>
-          <div class="d-flex justify-content-between py-2 border-bottom">
-            <span class="text-muted small">Email</span><span class="fw-bold" id="p-email">-</span>
+          <div class="list-row">
+            <span class="list-label">手機號碼</span>
+            <span class="list-value" id="p-phone">-</span>
           </div>
-          <div class="d-flex justify-content-between py-2 border-bottom">
-            <span class="text-muted small">手機</span><span class="fw-bold" id="p-phone">-</span>
+          <div class="list-row">
+            <span class="list-label">收件人</span>
+            <span class="list-value" id="p-receiver">-</span>
           </div>
-          <div class="d-flex justify-content-between py-2 border-bottom">
-            <span class="text-muted small">收件人</span><span class="fw-bold" id="p-receiver">-</span>
-          </div>
-          <div class="d-flex justify-content-between py-2">
-            <span class="text-muted small">門市</span><span class="fw-bold" id="p-store">-</span>
+          <div class="list-row">
+            <span class="list-label">取貨門市</span>
+            <span class="list-value" id="p-store">-</span>
           </div>
         </div>
 
-        <div class="px-2 mt-4">
-          <a href="https://ormkub.pse.is/LINEOA527" target="_blank" class="btn btn-outline-success w-100 rounded-pill py-2">
-            <i class="bi bi-line me-1"></i> 聯繫客服修改資料
+        <div class="mt-4">
+          <a href="https://ormkub.pse.is/LINEOA527" target="_blank" class="btn-support">
+            <i class="bi bi-headset"></i> 聯繫客服修改資料
           </a>
         </div>
+
       </div>
 
       <div class="text-center mt-5 mb-3">
@@ -123,16 +127,37 @@
       </div>
 
     </div>
+    
+    <!-- 底部導航列 -->
+    <nav class="bottom-nav fade-in" style="animation-delay: 0.1s;">
+      <button class="nav-btn active" onclick="switchTab('home', this)">
+        <i class="bi bi-house-door-fill"></i>
+        <span>首頁</span>
+      </button>
+      <button class="nav-btn" onclick="switchTab('markets', this)">
+        <i class="bi bi-bag-heart-fill"></i>
+        <span>賣場</span>
+      </button>
+      <button class="nav-btn" onclick="switchTab('orders', this)">
+        <i class="bi bi-receipt"></i>
+        <span>訂單</span>
+      </button>
+      <button class="nav-btn" onclick="switchTab('profile', this)">
+        <i class="bi bi-person-circle"></i>
+        <span>資料</span>
+      </button>
+    </nav>
+
   </div>
 </div>
 
 <div class="modal fade" id="infoModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow" style="border-radius: 20px;">
+    <div class="modal-content border-0 shadow" style="border-radius: 20px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);">
       <div class="modal-body text-center p-4">
         <h5 class="fw-bold mb-3 text-secondary">系統訊息</h5>
         <p id="m-body" class="mb-4 text-dark"></p>
-        <button class="btn btn-secondary w-100 rounded-pill" data-bs-dismiss="modal">關閉</button>
+        <button class="action-btn" data-bs-dismiss="modal">關閉</button>
       </div>
     </div>
   </div>
@@ -145,3 +170,4 @@
 
 </body>
 </html>
+
