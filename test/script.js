@@ -1,12 +1,10 @@
 // ================= 設定區 =================
 const CONFIG = {
-  // 您的 GAS 部署網址
   API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
-  // 您的 LIFF ID
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
-const APP_VERSION = 'v8.0.0 (Vibrant Light)';
+const APP_VERSION = 'v8.1.0 (Speed Boost)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
@@ -38,11 +36,16 @@ async function callApi(act, pay={}) {
   return j.data;
 }
 
+function forceUpdate() {
+  sessionStorage.clear();
+  showLoading();
+  location.reload();
+}
+
 // 🔥 手風琴切換功能 (必須放在全域)
 function toggleGroup(header) {
   header.classList.toggle('active');
   const content = header.nextElementSibling;
-  // 切換顯示/隱藏
   if (content.style.display === 'none' || content.style.display === '') {
     content.style.display = 'block';
   } else {
@@ -52,15 +55,48 @@ function toggleGroup(header) {
 
 // ================= 使用者邏輯 =================
 async function checkUser(uid) {
+  const cacheKey = `ormkub_user_${uid}`;
+  const cached = sessionStorage.getItem(cacheKey);
+
+  // 1. 若有快取，先秒速渲染畫面
+  if (cached) {
+    const u = JSON.parse(cached);
+    currentUser = u;
+    renderProfile(u);
+    hideLoading();
+    showView('dashboard-view');
+    
+    // 背景預先載入其他分頁資料
+    loadMarkets(uid, true);
+    loadOrders(uid, true);
+  }
+
+  // 2. 背景向 GAS 請求最新資料
   try {
     const u = await callApi('checkUser', {uid});
-    hideLoading();
     if (u) {
+      sessionStorage.setItem(cacheKey, JSON.stringify(u));
       currentUser = u;
-      renderProfile(u);
-      showView('dashboard-view');
-    } else { showView('register-view'); }
-  } catch (e) { alert(e.message); }
+      renderProfile(u); // 更新為最新資料
+      
+      if (!cached) {
+        hideLoading();
+        showView('dashboard-view');
+        loadMarkets(uid, true);
+        loadOrders(uid, true);
+      }
+    } else { 
+      if (!cached) {
+        hideLoading();
+        showView('register-view'); 
+      }
+    }
+  } catch (e) { 
+    if (!cached) {
+      hideLoading();
+      alert(e.message); 
+    }
+  }
 }
 
 async function doRegister() {
@@ -75,7 +111,7 @@ async function doRegister() {
   try { 
     await callApi('register', {...vals, uid:currentUid}); 
     alert('綁定成功！');
-    location.reload(); 
+    forceUpdate(); 
   } catch(e) { hideLoading(); alert('綁定失敗: ' + e.message); }
 }
 
@@ -83,28 +119,17 @@ function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
   
-  // ===========================================
-  // 1. 首頁公告 (情報通知中心風格)
-  // ===========================================
+  // 1. 首頁公告
   const annoBox = document.getElementById('announcement-container');
   if (u.announcements && u.announcements.length > 0) {
     annoBox.innerHTML = u.announcements.map(a => {
       let typeClass = 'type-info'; 
       let icon = 'bi-info-circle-fill';
-      
-      if (a.type === 'alert') { 
-        typeClass = 'type-alert'; 
-        icon = 'bi-exclamation-triangle-fill'; 
-      } else if (a.type === 'success') { 
-        typeClass = 'type-success'; 
-        icon = 'bi-check-circle-fill'; 
-      }
-
+      if (a.type === 'alert') { typeClass = 'type-alert'; icon = 'bi-exclamation-triangle-fill'; } 
+      else if (a.type === 'success') { typeClass = 'type-success'; icon = 'bi-check-circle-fill'; }
       return `
         <div class="anno-card ${typeClass} fade-in">
-          <div class="anno-title">
-            <i class="bi ${icon}"></i> ${a.title}
-          </div>
+          <div class="anno-title"><i class="bi ${icon}"></i> ${a.title}</div>
           <div class="anno-content">${a.content}</div>
         </div>`;
     }).join('');
@@ -116,9 +141,7 @@ function renderProfile(u) {
       </div>`;
   }
 
-  // ===========================================
-  // 3. 個人資料 (虛擬黑卡 + iOS 設定頁)
-  // ===========================================
+  // 3. 個人資料
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
@@ -133,146 +156,178 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
 
+  // 如果還沒載入過，且沒有快取，就觸發載入 (通常背景已經在載了)
   if (tab === 'markets' && !loadedData.markets) loadMarkets(currentUid);
   if (tab === 'orders' && !loadedData.orders) loadOrders(currentUid);
 }
 
-// ================= 資料載入：賣場 (VIP 專屬通行證) =================
-async function loadMarkets(uid) {
+// ================= 資料載入：賣場 =================
+async function loadMarkets(uid, isBackground = false) {
   const div = document.getElementById('market-list');
-  div.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>';
+  const cacheKey = `ormkub_markets_${uid}`;
+  const cached = sessionStorage.getItem(cacheKey);
+
+  if (cached) {
+    renderMarkets(JSON.parse(cached));
+    loadedData.markets = true;
+  } else if (!isBackground) {
+    div.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+  }
+
   try {
     const mkts = await callApi('getMarkets', {uid});
-    loadedData.markets = true; 
-    div.innerHTML = mkts.length ? mkts.map(m => `
-      <a href="${m.link}" target="_blank" class="btn-market fade-in">
-        <div class="market-info">
-          <h6>${m.sheetName}</h6>
-          <small>${m.desc||'點擊前往專屬賣場'}</small>
-        </div>
-        <i class="bi bi-chevron-right"></i>
-      </a>`).join('') : '<div class="text-center text-muted p-4">目前無專屬賣場</div>';
-  } catch(e) { div.innerHTML = '載入失敗'; }
+    sessionStorage.setItem(cacheKey, JSON.stringify(mkts));
+    loadedData.markets = true;
+    
+    // 如果目前停留在賣場 tab，或是原本沒有快取，就更新畫面
+    const currentTab = document.getElementById('tab-markets');
+    if (!currentTab.classList.contains('hidden') || !cached) {
+      renderMarkets(mkts);
+    }
+  } catch(e) { 
+    if (!cached && !isBackground) div.innerHTML = '載入失敗'; 
+  }
 }
 
-// ================= 資料載入：訂單 (存摺風) =================
-async function loadOrders(uid) {
+function renderMarkets(mkts) {
+  const div = document.getElementById('market-list');
+  div.innerHTML = mkts.length ? mkts.map(m => `
+    <a href="${m.link}" target="_blank" class="btn-market fade-in">
+      <div class="market-info">
+        <h6>${m.sheetName}</h6>
+        <small>${m.desc||'點擊前往專屬賣場'}</small>
+      </div>
+      <i class="bi bi-chevron-right"></i>
+    </a>`).join('') : '<div class="text-center text-muted p-4">目前無專屬賣場</div>';
+}
+
+// ================= 資料載入：訂單 =================
+async function loadOrders(uid, isBackground = false) {
   const div = document.getElementById('orders-container');
-  div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
-  
+  const cacheKey = `ormkub_orders_${uid}`;
+  const cached = sessionStorage.getItem(cacheKey);
+
+  if (cached) {
+    renderOrders(JSON.parse(cached));
+    loadedData.orders = true;
+  } else if (!isBackground) {
+    div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
+  }
+
   try {
     const groups = await callApi('getOrders', {uid});
+    sessionStorage.setItem(cacheKey, JSON.stringify(groups));
     loadedData.orders = true;
+    
+    const currentTab = document.getElementById('tab-orders');
+    if (!currentTab.classList.contains('hidden') || !cached) {
+      renderOrders(groups);
+    }
+  } catch(e) { 
+    if (!cached && !isBackground) div.innerHTML = '載入失敗，請刷新重試'; 
+  }
+}
 
-    if (!groups || groups.length === 0) {
-      div.innerHTML = `<div class="text-center py-5 fade-in"><i class="bi bi-basket display-1 text-muted opacity-25"></i><p class="mt-3 text-muted">尚無訂購紀錄</p></div>`;
-      return;
+function renderOrders(groups) {
+  const div = document.getElementById('orders-container');
+  if (!groups || groups.length === 0) {
+    div.innerHTML = `<div class="text-center py-5 fade-in"><i class="bi bi-basket display-1 text-muted opacity-25"></i><p class="mt-3 text-muted">尚無訂購紀錄</p></div>`;
+    return;
+  }
+
+  const formatTime = (t) => {
+    if (!t) return '-';
+    try {
+      let d = new Date(t);
+      if (isNaN(d.getTime())) return t; 
+      return d.getFullYear() + '/' + (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    } catch(e) { return t; }
+  };
+
+  div.innerHTML = groups.map((g, index) => {
+    const isFirst = index === 0;
+    const displayStyle = isFirst ? 'block' : 'none';
+    const activeClass = isFirst ? 'active' : '';
+
+    let details = (g.details && g.details.length) ? g.details.map(d => `
+      <div class="item-row">
+        <div>
+          <div class="item-name">${d.item}</div>
+          ${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}
+        </div>
+        <div class="item-qty">x${d.qty}</div>
+      </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
+
+    let summaryHtml = '';
+    let rowTotal = '0';
+    let rowStatus = '未標示';
+    let badgeCls = 'st-wait';
+    let rowDate = '-';
+    
+    if (g.summary && g.summary.length > 0) {
+      let s = g.summary[0];
+      rowTotal = s.total;
+      rowStatus = s.status || '未標示';
+      rowDate = formatTime(s.time);
+      
+      if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
+      else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
+
+      let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
+      
+      let actionBtn = s.formLink ? `
+        <div class="mt-3">
+          <a href="${s.formLink}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
+        </div>
+      ` : '';
+
+      summaryHtml = `
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">總件數</span>
+            <span class="info-value">${s.count || '-'} 件</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">實收金額</span>
+            <span class="info-value val-blue">$${s.actual || '-'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">後五碼</span>
+            <span class="info-value">${s.last5 || '未填'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">收款時間</span>
+            <span class="info-value">${rowDate}</span>
+          </div>
+        </div>
+        ${noteHtml}
+        ${actionBtn}
+      `;
+    } else {
+      summaryHtml = '<div class="text-center small text-muted">待核算</div>';
     }
 
-    const formatTime = (t) => {
-      if (!t) return '-';
-      try {
-        let d = new Date(t);
-        if (isNaN(d.getTime())) return t; 
-        return d.getFullYear() + '/' + (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-      } catch(e) { return t; }
-    };
-
-    div.innerHTML = groups.map((g, index) => {
-      // 邏輯：第一筆(最新)展開，其他收合
-      const isFirst = index === 0;
-      const displayStyle = isFirst ? 'block' : 'none';
-      const activeClass = isFirst ? 'active' : '';
-
-      // 1. 明細 HTML
-      let details = (g.details && g.details.length) ? g.details.map(d => `
-        <div class="item-row">
-          <div>
-            <div class="item-name">${d.item}</div>
-            ${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}
-          </div>
-          <div class="item-qty">x${d.qty}</div>
-        </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
-
-      // 2. 對帳 HTML 與 橫列外觀
-      let summaryHtml = '';
-      let rowTotal = '0';
-      let rowStatus = '未標示';
-      let badgeCls = 'st-wait';
-      let rowDate = '-';
-      
-      if (g.summary && g.summary.length > 0) {
-        let s = g.summary[0]; // 取第一筆對帳資料
-        rowTotal = s.total;
-        rowStatus = s.status || '未標示';
-        // 確保收款時間有被 formatTime 處理
-        rowDate = formatTime(s.time);
-        
-        if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
-        else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
-
-        let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
-        
-        let actionBtn = s.formLink ? `
-          <div class="mt-3">
-            <a href="${s.formLink}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
-          </div>
-        ` : '';
-
-        summaryHtml = `
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">總件數</span>
-              <span class="info-value">${s.count || '-'} 件</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">實收金額</span>
-              <span class="info-value val-blue">$${s.actual || '-'}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">後五碼</span>
-              <span class="info-value">${s.last5 || '未填'}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">收款時間</span>
-              <span class="info-value">${rowDate}</span>
+    return `
+      <div class="transaction-row fade-in">
+        <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
+          <div class="tx-left">
+            <div class="tx-icon"><i class="bi bi-bag-check"></i></div>
+            <div class="tx-title">
+              <span class="group-name">${g.groupName}</span>
+              <span class="tx-date">${rowDate}</span>
             </div>
           </div>
-          ${noteHtml}
-          ${actionBtn}
-        `;
-      } else {
-        summaryHtml = '<div class="text-center small text-muted">待核算</div>';
-      }
-
-      // 🔥 Apple Wallet 存摺風 橫列結構
-      return `
-        <div class="transaction-row fade-in">
-          <!-- 橫列標題 (點擊展開) -->
-          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
-            <div class="tx-left">
-              <div class="tx-icon">
-                <i class="bi bi-bag-check"></i>
-              </div>
-              <div class="tx-title">
-                <span class="group-name">${g.groupName}</span>
-                <span class="tx-date">${rowDate}</span>
-              </div>
-            </div>
-            <div class="tx-right">
-              <span class="tx-amount">$${rowTotal}</span>
-              <span class="status-badge ${badgeCls}">${rowStatus}</span>
-            </div>
+          <div class="tx-right">
+            <span class="tx-amount">$${rowTotal}</span>
+            <span class="status-badge ${badgeCls}">${rowStatus}</span>
           </div>
-          
-          <!-- 抽屜內容 (預設隱藏) -->
-          <div class="group-content" style="display: ${displayStyle};">
-            <div class="item-list">${details}</div>
-            ${summaryHtml}
-          </div>
-        </div>`;
-    }).join('');
-  } catch(e) { div.innerHTML = '載入失敗，請刷新重試'; }
+        </div>
+        <div class="group-content" style="display: ${displayStyle};">
+          <div class="item-list">${details}</div>
+          ${summaryHtml}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 // Helper
