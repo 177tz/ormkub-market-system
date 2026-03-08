@@ -6,7 +6,7 @@ const CONFIG = {
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
-const APP_VERSION = 'v2.6.0 (Accordion)';
+const APP_VERSION = 'v8.0.0 (Vibrant Light)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
@@ -43,7 +43,7 @@ function toggleGroup(header) {
   header.classList.toggle('active');
   const content = header.nextElementSibling;
   // 切換顯示/隱藏
-  if (content.style.display === 'none') {
+  if (content.style.display === 'none' || content.style.display === '') {
     content.style.display = 'block';
   } else {
     content.style.display = 'none';
@@ -83,26 +83,42 @@ function renderProfile(u) {
   document.getElementById('header-name').innerText = u.name;
   document.getElementById('header-group').innerText = u.group_name;
   
+  // ===========================================
+  // 1. 首頁公告 (情報通知中心風格)
+  // ===========================================
   const annoBox = document.getElementById('announcement-container');
   if (u.announcements && u.announcements.length > 0) {
     annoBox.innerHTML = u.announcements.map(a => {
-      let colorClass = 'border-primary text-primary'; 
+      let typeClass = 'type-info'; 
       let icon = 'bi-info-circle-fill';
-      if (a.type === 'alert') { colorClass = 'border-danger text-danger'; icon = 'bi-exclamation-triangle-fill'; } 
-      else if (a.type === 'success') { colorClass = 'border-success text-success'; icon = 'bi-check-circle-fill'; }
+      
+      if (a.type === 'alert') { 
+        typeClass = 'type-alert'; 
+        icon = 'bi-exclamation-triangle-fill'; 
+      } else if (a.type === 'success') { 
+        typeClass = 'type-success'; 
+        icon = 'bi-check-circle-fill'; 
+      }
 
       return `
-        <div class="card-box mb-3 fade-in" style="border-left: 5px solid; border-color: inherit;">
-          <div class="${colorClass}">
-            <h6 class="fw-bold mb-2"><i class="bi ${icon} me-2"></i>${a.title}</h6>
-            <p class="small text-muted mb-0 text-dark" style="line-height: 1.5; white-space: pre-wrap;">${a.content}</p>
+        <div class="anno-card ${typeClass} fade-in">
+          <div class="anno-title">
+            <i class="bi ${icon}"></i> ${a.title}
           </div>
+          <div class="anno-content">${a.content}</div>
         </div>`;
     }).join('');
   } else {
-    annoBox.innerHTML = `<div class="card-box"><h6 class="fw-bold text-muted mb-2">最新公告</h6><p class="small text-muted mb-0">目前沒有新公告。</p></div>`;
+    annoBox.innerHTML = `
+      <div class="anno-card type-info">
+        <div class="anno-title"><i class="bi bi-megaphone-fill"></i> 最新公告</div>
+        <div class="anno-content">目前沒有新公告。</div>
+      </div>`;
   }
 
+  // ===========================================
+  // 3. 個人資料 (虛擬黑卡 + iOS 設定頁)
+  // ===========================================
   document.getElementById('p-group').innerText = u.group_name;
   document.getElementById('p-email').innerText = u.email;
   document.getElementById('p-phone').innerText = u.phone;
@@ -121,7 +137,7 @@ function switchTab(tab, btn) {
   if (tab === 'orders' && !loadedData.orders) loadOrders(currentUid);
 }
 
-// ================= 資料載入：賣場 =================
+// ================= 資料載入：賣場 (VIP 專屬通行證) =================
 async function loadMarkets(uid) {
   const div = document.getElementById('market-list');
   div.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>';
@@ -130,13 +146,16 @@ async function loadMarkets(uid) {
     loadedData.markets = true; 
     div.innerHTML = mkts.length ? mkts.map(m => `
       <a href="${m.link}" target="_blank" class="btn-market fade-in">
-        <div><h6 class="mb-0 fw-bold" style="color:var(--primary-dark)">${m.sheetName}</h6><small class="text-muted">${m.desc||'點擊前往'}</small></div>
-        <i class="bi bi-chevron-right text-muted"></i>
+        <div class="market-info">
+          <h6>${m.sheetName}</h6>
+          <small>${m.desc||'點擊前往專屬賣場'}</small>
+        </div>
+        <i class="bi bi-chevron-right"></i>
       </a>`).join('') : '<div class="text-center text-muted p-4">目前無專屬賣場</div>';
   } catch(e) { div.innerHTML = '載入失敗'; }
 }
 
-// ================= 資料載入：訂單 (含開合) =================
+// ================= 資料載入：訂單 (存摺風) =================
 async function loadOrders(uid) {
   const div = document.getElementById('orders-container');
   div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -155,7 +174,7 @@ async function loadOrders(uid) {
       try {
         let d = new Date(t);
         if (isNaN(d.getTime())) return t; 
-        return (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+        return d.getFullYear() + '/' + (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
       } catch(e) { return t; }
     };
 
@@ -165,49 +184,91 @@ async function loadOrders(uid) {
       const displayStyle = isFirst ? 'block' : 'none';
       const activeClass = isFirst ? 'active' : '';
 
-      // 1. 明細
+      // 1. 明細 HTML
       let details = (g.details && g.details.length) ? g.details.map(d => `
         <div class="item-row">
-          <div><div class="item-name">${d.item}</div>${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}</div>
+          <div>
+            <div class="item-name">${d.item}</div>
+            ${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}
+          </div>
           <div class="item-qty">x${d.qty}</div>
         </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
 
-      // 2. 對帳
-      let summary = (g.summary && g.summary.length) ? g.summary.map(s => {
-        let cls = 'status-wait'; let badgeCls = 'st-wait'; let st = s.status || '未標示';
-        if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('面交')) { cls = 'status-ok'; badgeCls = 'st-ok'; }
-        else if(st.includes('❌') || st.includes('有誤') || st.includes('不符')) { cls = 'status-err'; badgeCls = 'st-err'; }
+      // 2. 對帳 HTML 與 橫列外觀
+      let summaryHtml = '';
+      let rowTotal = '0';
+      let rowStatus = '未標示';
+      let badgeCls = 'st-wait';
+      let rowDate = '-';
+      
+      if (g.summary && g.summary.length > 0) {
+        let s = g.summary[0]; // 取第一筆對帳資料
+        rowTotal = s.total;
+        rowStatus = s.status || '未標示';
+        // 確保收款時間有被 formatTime 處理
+        rowDate = formatTime(s.time);
+        
+        if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
+        else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
 
-        let noteHtml = s.note ? `<div class="mt-2 p-2 bg-warning bg-opacity-10 rounded text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
-        let prettyTime = formatTime(s.time);
-
-        return `
-          <div class="card-box order-card ${cls} mt-2 fade-in">
-            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-               <span class="status-badge ${badgeCls}">${st}</span>
-               <div class="text-end"><span class="d-block small text-muted">應付總額</span><span class="val-highlight">$${s.total}</span></div>
-            </div>
-            <div class="summary-grid">
-              <div class="info-block"><span class="info-label">總件數</span><span class="info-val">${s.count || '-'}</span></div>
-              <div class="info-block"><span class="info-label">原價總額</span><span class="info-val">$${s.orig || '-'}</span></div>
-              <div class="info-block" style="grid-column: span 2;"><span class="info-label">實收金額</span><span class="info-val val-blue">$${s.actual || '-'}</span></div>
-              <div class="info-block"><span class="info-label">後五碼</span><span class="info-val">${s.last5 || '未填'}</span></div>
-              <div class="info-block"><span class="info-label">收款時間</span><span class="info-val" style="font-size:0.8rem">${prettyTime}</span></div>
-            </div>
-            ${noteHtml}
-          </div>`;
-      }).join('') : '<div class="text-center small text-muted">待核算</div>';
-
-      // 🔥 手風琴結構
-      return `
-        <div class="mb-3 border-bottom pb-3">
-          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
-            <div class="group-name mb-0"><i class="bi bi-folder2-open text-primary me-2"></i> ${g.groupName}</div>
-            <i class="bi bi-chevron-down toggle-icon"></i>
+        let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
+        
+        let actionBtn = s.formLink ? `
+          <div class="mt-3">
+            <a href="${s.formLink}" target="_blank" class="action-btn">前往匯款 / 填寫表單</a>
           </div>
+        ` : '';
+
+        summaryHtml = `
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">總件數</span>
+              <span class="info-value">${s.count || '-'} 件</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">實收金額</span>
+              <span class="info-value val-blue">$${s.actual || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">後五碼</span>
+              <span class="info-value">${s.last5 || '未填'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">收款時間</span>
+              <span class="info-value">${rowDate}</span>
+            </div>
+          </div>
+          ${noteHtml}
+          ${actionBtn}
+        `;
+      } else {
+        summaryHtml = '<div class="text-center small text-muted">待核算</div>';
+      }
+
+      // 🔥 Apple Wallet 存摺風 橫列結構
+      return `
+        <div class="transaction-row fade-in">
+          <!-- 橫列標題 (點擊展開) -->
+          <div class="group-header-clickable ${activeClass}" onclick="toggleGroup(this)">
+            <div class="tx-left">
+              <div class="tx-icon">
+                <i class="bi bi-bag-check"></i>
+              </div>
+              <div class="tx-title">
+                <span class="group-name">${g.groupName}</span>
+                <span class="tx-date">${rowDate}</span>
+              </div>
+            </div>
+            <div class="tx-right">
+              <span class="tx-amount">$${rowTotal}</span>
+              <span class="status-badge ${badgeCls}">${rowStatus}</span>
+            </div>
+          </div>
+          
+          <!-- 抽屜內容 (預設隱藏) -->
           <div class="group-content" style="display: ${displayStyle};">
-            <div class="card-box p-0 overflow-hidden mt-2"><div class="item-list m-0 rounded-0 border-0">${details}</div></div>
-            ${summary}
+            <div class="item-list">${details}</div>
+            ${summaryHtml}
           </div>
         </div>`;
     }).join('');
