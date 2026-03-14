@@ -209,8 +209,8 @@ async function loadOrders(uid, isBackground = false) {
   const cached = sessionStorage.getItem(cacheKey);
 
   if (cached) {
-    currentOrdersData = JSON.parse(cached);
-    handleSortOrders(); // 改呼叫排序邏輯
+    currentOrdersData = JSON.parse(cached) || [];
+    handleSortOrders();
     loadedData.orders = true;
   } else if (!isBackground) {
     div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -218,27 +218,32 @@ async function loadOrders(uid, isBackground = false) {
 
   try {
     const groups = await callApi('getOrders', {uid});
-    sessionStorage.setItem(cacheKey, JSON.stringify(groups));
+    sessionStorage.setItem(cacheKey, JSON.stringify(groups || []));
     loadedData.orders = true;
-    currentOrdersData = groups;
+    currentOrdersData = groups || []; // 🔥 加上 || [] 避免空資料時報錯
     
     const currentTab = document.getElementById('tab-orders');
     if (!currentTab.classList.contains('hidden') || !cached) {
-      handleSortOrders(); // 改呼叫排序邏輯
+      handleSortOrders();
     }
   } catch(e) { 
     if (!cached && !isBackground) div.innerHTML = '載入失敗，請刷新重試'; 
   }
 }
 
-// 🔥 更新：依據團單名稱排序的邏輯
+// 🔥 排序邏輯 (加入防呆機制)
 function handleSortOrders() {
   const sortSelect = document.getElementById('order-sort');
-  const method = sortSelect ? sortSelect.value : 'nameDesc'; // 預設名稱降冪
+  const method = sortSelect ? sortSelect.value : 'nameDesc'; 
   
+  // 🔥 防呆：確保 currentOrdersData 裡面真的有東西，沒有就直接渲染空畫面，避免當機
+  if (!currentOrdersData || !Array.isArray(currentOrdersData) || currentOrdersData.length === 0) {
+    renderOrders([]);
+    return;
+  }
+
   let sortedGroups = [...currentOrdersData];
   
-  // 判斷狀態權重 (1=完成, 0=待處理/異常)
   const getStatusWeight = (st) => {
     if(!st) return 0;
     if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('面交')) return 1;
@@ -252,16 +257,15 @@ function handleSortOrders() {
     let wA = getStatusWeight(a.summary?.[0]?.status);
     let wB = getStatusWeight(b.summary?.[0]?.status);
 
-    // localeCompare 可以很好地處理中文與數字的字母排序
     if (method === 'nameDesc') return nameB.localeCompare(nameA, 'zh-TW'); 
     if (method === 'nameAsc') return nameA.localeCompare(nameB, 'zh-TW'); 
     
     if (method === 'statusWait') {
-      if (wA !== wB) return wA - wB; // 0 (待處理) 排在 1 (完成) 前面
-      return nameB.localeCompare(nameA, 'zh-TW'); // 狀態一樣時，依名稱排
+      if (wA !== wB) return wA - wB; 
+      return nameB.localeCompare(nameA, 'zh-TW'); 
     }
     if (method === 'statusOk') {
-      if (wA !== wB) return wB - wA; // 1 (完成) 排在 0 (待處理) 前面
+      if (wA !== wB) return wB - wA; 
       return nameB.localeCompare(nameA, 'zh-TW'); 
     }
     return 0;
