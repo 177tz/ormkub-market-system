@@ -1,9 +1,9 @@
 const CONFIG = {
-  API_URL: '[https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec](https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec)',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
-const APP_VERSION = 'v8.2.0 (Stable Pro)';
+const APP_VERSION = 'v8.3.0 (Stable Pro)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = []; 
@@ -84,7 +84,6 @@ async function checkUser(uid) {
   }
 }
 
-// 🔥 LINE 圖文選單跳轉邏輯
 function handleUrlTab() {
   const urlParams = new URLSearchParams(window.location.search);
   const targetTab = urlParams.get('tab');
