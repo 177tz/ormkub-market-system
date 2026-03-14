@@ -4,13 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Ormkub 會員專區</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-
+<link href="[https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap)" rel="stylesheet">
+<link href="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css)" rel="stylesheet">
+<link rel="stylesheet" href="[https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css](https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css)">
 <link rel="stylesheet" href="style.css">
-
 </head>
 <body>
 
@@ -20,7 +17,6 @@
 </div>
 
 <div id="app">
-  
   <div class="welcome-section">
     <div class="d-flex justify-content-between align-items-center user-info">
       <div>
@@ -37,42 +33,22 @@
     <div class="card-box">
       <h4 class="fw-bold text-center mb-4">會員綁定</h4>
       <p class="text-center text-muted small mb-4">請填寫正確資料以啟用查詢功能</p>
-      
       <form onsubmit="event.preventDefault(); doRegister();">
-        <div class="mb-3">
-          <label class="small text-muted ms-1">Email</label>
-          <input type="email" id="reg-email" class="form-input" required placeholder="請輸入 Email">
-        </div>
-        <div class="mb-3">
-          <label class="small text-muted ms-1">群內名稱</label>
-          <input type="text" id="reg-name" class="form-input" required placeholder="請填寫完整暱稱 (需與群組一致)">
-        </div>
-        <div class="mb-3">
-          <label class="small text-muted ms-1">收件人姓名</label>
-          <input type="text" id="reg-receiver" class="form-input" required placeholder="包裹收件人">
-        </div>
-        <div class="mb-3">
-          <label class="small text-muted ms-1">手機號碼</label>
-          <input type="tel" id="reg-phone" class="form-input" required placeholder="09xxxxxxxx">
-        </div>
-        <div class="mb-3">
-          <label class="small text-muted ms-1">取貨門市</label>
-          <input type="text" id="reg-store" class="form-input" required placeholder="7-11 門市名稱">
-        </div>
-        
+        <div class="mb-3"><label class="small text-muted ms-1">Email</label><input type="email" id="reg-email" class="form-input" required placeholder="請輸入 Email"></div>
+        <div class="mb-3"><label class="small text-muted ms-1">群內名稱</label><input type="text" id="reg-name" class="form-input" required placeholder="請填寫完整暱稱 (需與群組一致)"></div>
+        <div class="mb-3"><label class="small text-muted ms-1">收件人姓名</label><input type="text" id="reg-receiver" class="form-input" required placeholder="包裹收件人"></div>
+        <div class="mb-3"><label class="small text-muted ms-1">手機號碼</label><input type="tel" id="reg-phone" class="form-input" required placeholder="09xxxxxxxx"></div>
+        <div class="mb-3"><label class="small text-muted ms-1">取貨門市</label><input type="text" id="reg-store" class="form-input" required placeholder="7-11 門市名稱"></div>
         <button type="submit" class="action-btn mt-2">確認綁定</button>
       </form>
     </div>
   </div>
 
   <div id="dashboard-view" class="hidden">
-    
     <div class="container pb-5 pt-3">
       
       <div id="tab-home" class="content-section fade-in">
-        <div id="announcement-container">
-          <div class="text-center py-3 small text-muted">載入公告中...</div>
-        </div>
+        <div id="announcement-container"><div class="text-center py-3 small text-muted">載入公告中...</div></div>
       </div>
 
       <div id="tab-markets" class="content-section hidden fade-in">
@@ -80,7 +56,6 @@
       </div>
 
       <div id="tab-orders" class="content-section hidden fade-in">
-        
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h6 class="section-title mb-0">Transactions</h6>
           <select id="order-sort" class="form-select form-select-sm" style="width: auto; border-radius: 10px; font-size: 13px; font-weight: 700; border-color: var(--border-color); color: var(--dusk-blue); background-color: var(--surface); cursor: pointer; box-shadow: none;" onchange="handleSortOrders()">
@@ -98,83 +73,39 @@
             <li><span class="fw-bold" style="color: #1C8561;">配貨成功</span>：表示有購買到。</li>
             <li><span class="fw-bold" style="color: #0EB1D2;">到台</span>：表示商品已到台。</li>
           </ul>
-          <div class="notice-footer">
-            ⚠️ 訂單到齊才會開賣貨便給下單，如果需要先寄出已到台的商品，請告知官方 LINE，謝謝。
-          </div>
+          <div class="notice-footer">⚠️ 訂單到齊才會開賣貨便給下單，如果需要先寄出已到台的商品，請告知官方 LINE，謝謝。</div>
         </div>
-
         <div id="orders-container"></div>
-        
-      </div> 
-      ```
-
-只要確保這三個東西（下拉選單、說明框框、orders-container）都乖乖待在 `id="tab-orders"` 這個 `<div>` 裡面，它們就不會跑去別的頁面串門子囉！您可以直接覆蓋貼上試試看！
+      </div>
 
       <div id="tab-profile" class="content-section hidden fade-in">
-        
-        <!-- 虛擬黑卡 -->
         <div class="virtual-black-card">
           <div class="card-chip"></div>
           <div class="card-name-label">MEMBER NAME</div>
           <div class="card-name-value" id="p-group">-</div>
         </div>
-
-        <!-- iOS 設定頁風格列表 -->
         <div class="inset-list">
-          <div class="list-row">
-            <span class="list-label">Email</span>
-            <span class="list-value" id="p-email">-</span>
-          </div>
-          <div class="list-row">
-            <span class="list-label">手機號碼</span>
-            <span class="list-value" id="p-phone">-</span>
-          </div>
-          <div class="list-row">
-            <span class="list-label">收件人</span>
-            <span class="list-value" id="p-receiver">-</span>
-          </div>
-          <div class="list-row">
-            <span class="list-label">取貨門市</span>
-            <span class="list-value" id="p-store">-</span>
-          </div>
+          <div class="list-row"><span class="list-label">Email</span><span class="list-value" id="p-email">-</span></div>
+          <div class="list-row"><span class="list-label">手機號碼</span><span class="list-value" id="p-phone">-</span></div>
+          <div class="list-row"><span class="list-label">收件人</span><span class="list-value" id="p-receiver">-</span></div>
+          <div class="list-row"><span class="list-label">取貨門市</span><span class="list-value" id="p-store">-</span></div>
         </div>
-
         <div class="mt-4">
-          <a href="https://ormkub.pse.is/LINEOA527" target="_blank" class="btn-support">
-            <i class="bi bi-headset"></i> 聯繫客服修改資料
-          </a>
+          <a href="[https://ormkub.pse.is/LINEOA527](https://ormkub.pse.is/LINEOA527)" target="_blank" class="btn-support"><i class="bi bi-headset"></i> 聯繫客服修改資料</a>
         </div>
-
       </div>
 
       <div class="text-center mt-5 mb-3">
-        <span class="badge bg-light text-secondary border rounded-pill px-3 py-2" style="font-weight: normal; letter-spacing: 0.5px;">
-          系統版本: <span id="app-version-display">v1.0</span>
-        </span>
+        <span class="badge bg-light text-secondary border rounded-pill px-3 py-2" style="font-weight: normal; letter-spacing: 0.5px;">系統版本: <span id="app-version-display">v1.0</span></span>
       </div>
-
     </div>
     
-    <!-- 底部導航列 -->
     <nav class="bottom-nav fade-in" style="animation-delay: 0.1s;">
-      <button class="nav-btn active" onclick="switchTab('home', this)">
-        <i class="bi bi-house-door-fill"></i>
-        <span>首頁</span>
-      </button>
-      <button class="nav-btn" onclick="switchTab('markets', this)">
-        <i class="bi bi-bag-heart-fill"></i>
-        <span>賣場</span>
-      </button>
-      <button class="nav-btn" onclick="switchTab('orders', this)">
-        <i class="bi bi-receipt"></i>
-        <span>訂單</span>
-      </button>
-      <button class="nav-btn" onclick="switchTab('profile', this)">
-        <i class="bi bi-person-circle"></i>
-        <span>資料</span>
-      </button>
+      <button class="nav-btn active" onclick="switchTab('home', this)"><i class="bi bi-house-door-fill"></i><span>首頁</span></button>
+      <button class="nav-btn" onclick="switchTab('markets', this)"><i class="bi bi-bag-heart-fill"></i><span>賣場</span></button>
+      <button class="nav-btn" onclick="switchTab('orders', this)"><i class="bi bi-receipt"></i><span>訂單</span></button>
+      <button class="nav-btn" onclick="switchTab('profile', this)"><i class="bi bi-person-circle"></i><span>資料</span></button>
     </nav>
-
   </div>
 </div>
 
@@ -190,11 +121,8 @@
   </div>
 </div>
 
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
+<script src="[https://static.line-scdn.net/liff/edge/2/sdk.js](https://static.line-scdn.net/liff/edge/2/sdk.js)"></script>
+<script src="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js)"></script>
 <script src="script.js"></script>
-
 </body>
 </html>
-
