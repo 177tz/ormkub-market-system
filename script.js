@@ -8,6 +8,7 @@ const APP_VERSION = 'v8.1.0 (Speed Boost)';
 
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
+let currentOrdersData = []; // 🔥 新增：用來儲存當前訂單資料以供排序
 
 // ================= 初始化 =================
 window.onload = async () => {
@@ -208,7 +209,8 @@ async function loadOrders(uid, isBackground = false) {
   const cached = sessionStorage.getItem(cacheKey);
 
   if (cached) {
-    renderOrders(JSON.parse(cached));
+    currentOrdersData = JSON.parse(cached);
+    handleSortOrders(); // 改呼叫排序邏輯
     loadedData.orders = true;
   } else if (!isBackground) {
     div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -218,14 +220,55 @@ async function loadOrders(uid, isBackground = false) {
     const groups = await callApi('getOrders', {uid});
     sessionStorage.setItem(cacheKey, JSON.stringify(groups));
     loadedData.orders = true;
+    currentOrdersData = groups;
     
     const currentTab = document.getElementById('tab-orders');
     if (!currentTab.classList.contains('hidden') || !cached) {
-      renderOrders(groups);
+      handleSortOrders(); // 改呼叫排序邏輯
     }
   } catch(e) { 
     if (!cached && !isBackground) div.innerHTML = '載入失敗，請刷新重試'; 
   }
+}
+
+// 🔥 新增：訂單排序邏輯
+function handleSortOrders() {
+  const sortSelect = document.getElementById('order-sort');
+  const method = sortSelect ? sortSelect.value : 'timeDesc';
+  
+  // 複製一份陣列來排序，避免污染原始資料
+  let sortedGroups = [...currentOrdersData];
+  
+  // 判斷狀態權重 (1=完成, 0=待處理, -1=異常)
+  const getStatusWeight = (st) => {
+    if(!st) return 0;
+    if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('面交')) return 1;
+    if(st.includes('❌') || st.includes('有誤') || st.includes('不符')) return -1;
+    return 0; 
+  };
+
+  sortedGroups.sort((a, b) => {
+    let tA = new Date(a.summary?.[0]?.time || 0).getTime();
+    let tB = new Date(b.summary?.[0]?.time || 0).getTime();
+    if (isNaN(tA)) tA = 0; if (isNaN(tB)) tB = 0;
+
+    let wA = getStatusWeight(a.summary?.[0]?.status);
+    let wB = getStatusWeight(b.summary?.[0]?.status);
+
+    if (method === 'timeDesc') return tB - tA; // 時間新到舊
+    if (method === 'timeAsc') return tA - tB; // 時間舊到新
+    if (method === 'statusWait') {
+      if (wA !== wB) return wA - wB; // 待處理/異常優先
+      return tB - tA; // 若狀態一樣，新的排前面
+    }
+    if (method === 'statusOk') {
+      if (wA !== wB) return wB - wA; // 已完成優先
+      return tB - tA; // 若狀態一樣，新的排前面
+    }
+    return 0;
+  });
+
+  renderOrders(sortedGroups);
 }
 
 function renderOrders(groups) {
@@ -273,7 +316,8 @@ function renderOrders(groups) {
       if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
       else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
 
-      let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size:0.85rem; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
+      // 🔥 這裡把備註的字體大小從 0.85rem 改成 14px，並加深字體顏色以符合內文大小
+      let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size: 14px; font-weight: 600; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
       
       let actionBtn = s.formLink ? `
         <div class="mt-3">
@@ -329,13 +373,4 @@ function renderOrders(groups) {
         </div>
       </div>`;
   }).join('');
-}
-
-// Helper
-function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
-function showLoading() { document.getElementById('loading-overlay').classList.remove('hidden'); }
-function showView(id) {
-  document.getElementById('register-view').classList.add('hidden');
-  document.getElementById('dashboard-view').classList.add('hidden');
-  document.getElementById(id).classList.remove('hidden');
 }
