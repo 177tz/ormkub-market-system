@@ -80,7 +80,21 @@
       </div>
 
       <div id="tab-orders" class="content-section hidden fade-in">
-        <div id="orders-container" class="transaction-list"></div>
+        <h6 class="section-title">Transactions</h6>
+        
+        <div class="order-notice-box">
+          <div class="notice-title"><i class="bi bi-info-circle-fill me-1"></i> 訂單狀態說明</div>
+          <ul class="notice-list">
+            <li><span class="fw-bold">應付預收款項</span>：表示應該要預先付款的金額，每個商品已扣除 20 後的加總。</li>
+            <li><span class="fw-bold" style="color: #1C8561;">配貨成功</span>：表示有購買到。</li>
+            <li><span class="fw-bold" style="color: var(--accent-blue);">到台</span>：表示商品已到台。</li>
+          </ul>
+          <div class="notice-footer">
+            ⚠️ 訂單到齊才會開賣貨便給下單，如果需要先寄出已到台的商品，請告知官方 LINE，謝謝。
+          </div>
+        </div>
+
+        <div id="orders-container"></div>
       </div>
 
       <div id="tab-profile" class="content-section hidden fade-in">
