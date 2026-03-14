@@ -317,8 +317,9 @@ function renderOrders(groups) {
               <span class="tx-date">${rowDate}</span>
             </div>
           </div>
-          <div class="tx-right">
-            <span class="tx-amount">$${rowTotal}</span>
+          <div class="tx-right" style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+            <span style="font-size: 11px; font-weight: 700; color: #8E8E93; letter-spacing: 0.5px;">應付預收款項</span>
+            <span class="tx-amount" style="line-height: 1;">$${rowTotal}</span>
             <span class="status-badge ${badgeCls}">${rowStatus}</span>
           </div>
         </div>
