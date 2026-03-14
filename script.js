@@ -231,39 +231,38 @@ async function loadOrders(uid, isBackground = false) {
   }
 }
 
-// 🔥 新增：訂單排序邏輯
+// 🔥 更新：依據團單名稱排序的邏輯
 function handleSortOrders() {
   const sortSelect = document.getElementById('order-sort');
-  const method = sortSelect ? sortSelect.value : 'timeDesc';
+  const method = sortSelect ? sortSelect.value : 'nameDesc'; // 預設名稱降冪
   
-  // 複製一份陣列來排序，避免污染原始資料
   let sortedGroups = [...currentOrdersData];
   
-  // 判斷狀態權重 (1=完成, 0=待處理, -1=異常)
+  // 判斷狀態權重 (1=完成, 0=待處理/異常)
   const getStatusWeight = (st) => {
     if(!st) return 0;
     if(st.includes('✅') || st.includes('完成') || st.includes('OK') || st.includes('面交')) return 1;
-    if(st.includes('❌') || st.includes('有誤') || st.includes('不符')) return -1;
     return 0; 
   };
 
   sortedGroups.sort((a, b) => {
-    let tA = new Date(a.summary?.[0]?.time || 0).getTime();
-    let tB = new Date(b.summary?.[0]?.time || 0).getTime();
-    if (isNaN(tA)) tA = 0; if (isNaN(tB)) tB = 0;
+    let nameA = a.groupName || "";
+    let nameB = b.groupName || "";
 
     let wA = getStatusWeight(a.summary?.[0]?.status);
     let wB = getStatusWeight(b.summary?.[0]?.status);
 
-    if (method === 'timeDesc') return tB - tA; // 時間新到舊
-    if (method === 'timeAsc') return tA - tB; // 時間舊到新
+    // localeCompare 可以很好地處理中文與數字的字母排序
+    if (method === 'nameDesc') return nameB.localeCompare(nameA, 'zh-TW'); 
+    if (method === 'nameAsc') return nameA.localeCompare(nameB, 'zh-TW'); 
+    
     if (method === 'statusWait') {
-      if (wA !== wB) return wA - wB; // 待處理/異常優先
-      return tB - tA; // 若狀態一樣，新的排前面
+      if (wA !== wB) return wA - wB; // 0 (待處理) 排在 1 (完成) 前面
+      return nameB.localeCompare(nameA, 'zh-TW'); // 狀態一樣時，依名稱排
     }
     if (method === 'statusOk') {
-      if (wA !== wB) return wB - wA; // 已完成優先
-      return tB - tA; // 若狀態一樣，新的排前面
+      if (wA !== wB) return wB - wA; // 1 (完成) 排在 0 (待處理) 前面
+      return nameB.localeCompare(nameA, 'zh-TW'); 
     }
     return 0;
   });
@@ -292,11 +291,12 @@ function renderOrders(groups) {
     const displayStyle = isFirst ? 'block' : 'none';
     const activeClass = isFirst ? 'active' : '';
 
+    // 🔥 已經將 <i class="bi bi-info-circle-fill me-1"></i> 移除
     let details = (g.details && g.details.length) ? g.details.map(d => `
       <div class="item-row">
         <div>
           <div class="item-name">${d.item}</div>
-          ${d.note ? `<div class="item-note"><i class="bi bi-info-circle-fill me-1"></i>${d.note}</div>` : ''}
+          ${d.note ? `<div class="item-note">${d.note}</div>` : ''}
         </div>
         <div class="item-qty">x${d.qty}</div>
       </div>`).join('') : '<div class="text-center small text-muted py-2">無明細</div>';
@@ -316,7 +316,6 @@ function renderOrders(groups) {
       if(rowStatus.includes('✅') || rowStatus.includes('完成') || rowStatus.includes('OK') || rowStatus.includes('面交')) { badgeCls = 'st-ok'; }
       else if(rowStatus.includes('❌') || rowStatus.includes('有誤') || rowStatus.includes('不符')) { badgeCls = 'st-err'; }
 
-      // 🔥 這裡把備註的字體大小從 0.85rem 改成 14px，並加深字體顏色以符合內文大小
       let noteHtml = s.note ? `<div class="mt-3 p-3 bg-warning bg-opacity-10 rounded-3 text-warning border border-warning border-opacity-25" style="font-size: 14px; font-weight: 600; white-space: pre-wrap;"><i class="bi bi-exclamation-circle-fill me-1"></i>備註：${s.note}</div>` : '';
       
       let actionBtn = s.formLink ? `
