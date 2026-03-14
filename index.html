@@ -80,7 +80,15 @@
       </div>
 
       <div id="tab-orders" class="content-section hidden fade-in">
-        <h6 class="section-title">Transactions</h6>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="section-title mb-0">Transactions</h6>
+          <select id="order-sort" class="form-select form-select-sm" style="width: auto; border-radius: 10px; font-size: 13px; font-weight: 700; border-color: var(--border-color); color: var(--dusk-blue); background-color: var(--surface); cursor: pointer; box-shadow: none;" onchange="handleSortOrders()">
+            <option value="timeDesc">時間：新 ➔ 舊</option>
+            <option value="timeAsc">時間：舊 ➔ 新</option>
+            <option value="statusWait">狀態：待處理優先</option>
+            <option value="statusOk">狀態：已完成優先</option>
+          </select>
+        </div>
         
         <div class="order-notice-box">
           <div class="notice-title"><i class="bi bi-info-circle-fill me-1"></i> 訂單狀態說明</div>
