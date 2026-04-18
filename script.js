@@ -63,12 +63,19 @@ async function checkUser(uid) {
     currentUser = cachedUser;
     renderProfile(cachedUser);
 
-    // ⭐ 如果是從 LINE 進來，而且已能辨識會員，直接回 LINE
-    if (FROM_LINE && window.liff && liff.isInClient()) {
+    if (FROM_LINE && window.liff) {
       hideLoading();
-      setTimeout(() => {
-        liff.closeWindow();
-      }, 300);
+
+      try {
+        if (liff.isInClient()) {
+          liff.closeWindow();
+        } else {
+          window.location.href = "line://app";
+        }
+      } catch (e) {
+        window.location.href = "line://app";
+      }
+
       return;
     }
 
@@ -87,15 +94,21 @@ async function checkUser(uid) {
       currentUser = u;
       renderProfile(u);
 
-      // ⭐ 如果是從 LINE 進來，而且已能辨識會員，直接回 LINE
-      if (FROM_LINE && window.liff && liff.isInClient()) {
+      if (FROM_LINE && window.liff) {
         hideLoading();
-        setTimeout(() => {
-          liff.closeWindow();
-        }, 300);
+
+        try {
+          if (liff.isInClient()) {
+            liff.closeWindow();
+          } else {
+            window.location.href = "line://app";
+          }
+        } catch (e) {
+          window.location.href = "line://app";
+        }
+
         return;
       }
-
       if (!cachedUser) {
         hideLoading();
         showView('dashboard-view');
