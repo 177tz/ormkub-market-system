@@ -104,10 +104,15 @@ async function checkUser(uid) {
   try {
     const u = await callApi('checkUser', { uid });
 
-    if (u) {
+    if (u) {          
       sessionStorage.setItem(cacheKey, JSON.stringify(u));
       currentUser = u;
       renderProfile(u);
+
+      // ⭐ 自動補寫 message UID
+      try {
+        await callApi('bindMessageUid', { uid: currentUid });
+      } catch (e) {}
 
       if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
 
