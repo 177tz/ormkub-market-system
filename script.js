@@ -110,8 +110,9 @@ async function checkUser(uid) {
       renderProfile(u);
 
       // ⭐ 自動補寫 message UID
+      // ⭐ 通知 LINE 自動綁定
       try {
-        await callApi('bindMessageUid', { uid: currentUid });
+        await callApi('notifyBind', { liffUid: currentUid });
       } catch (e) {}
 
       if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
