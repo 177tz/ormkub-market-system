@@ -5,6 +5,8 @@ const CONFIG = {
 
 const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
+// 防止重複回跳
+const HAS_REDIRECTED = sessionStorage.getItem("__from_line_done") === "1";
 
 const APP_VERSION = 'v8.3.0 (Stable Pro)';
 let currentUid = '', currentUser = null;
@@ -63,15 +65,21 @@ async function checkUser(uid) {
     currentUser = cachedUser;
     renderProfile(cachedUser);
 
-    if (FROM_LINE && window.liff) {
+    if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
 
       hideLoading();
 
       // 防止重複觸發
       if (window.__closing) return;
       window.__closing = true;
+      sessionStorage.setItem("__from_line_done", "1");
 
       setTimeout(() => {
+        // 移除 URL 參數避免循環
+        if (window.history && window.location.search.includes("from=line")) {
+          const newUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        }
         try {
           if (liff.isInClient()) {
             liff.closeWindow();
@@ -101,15 +109,21 @@ async function checkUser(uid) {
       currentUser = u;
       renderProfile(u);
 
-      if (FROM_LINE && window.liff) {
+      if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
 
         hideLoading();
 
         // 防止重複觸發
         if (window.__closing) return;
         window.__closing = true;
+        sessionStorage.setItem("__from_line_done", "1");
 
         setTimeout(() => {
+          // 移除 URL 參數避免循環
+          if (window.history && window.location.search.includes("from=line")) {
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+          }
           try {
             if (liff.isInClient()) {
               liff.closeWindow();
