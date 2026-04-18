@@ -64,17 +64,24 @@ async function checkUser(uid) {
     renderProfile(cachedUser);
 
     if (FROM_LINE && window.liff) {
+
       hideLoading();
 
-      try {
-        if (liff.isInClient()) {
-          liff.closeWindow();
-        } else {
-          window.location.href = "line://app";
+      // 防止重複觸發
+      if (window.__closing) return;
+      window.__closing = true;
+
+      setTimeout(() => {
+        try {
+          if (liff.isInClient()) {
+            liff.closeWindow();
+          } else {
+            window.location.replace("line://app");
+          }
+        } catch (e) {
+          window.location.replace("line://app");
         }
-      } catch (e) {
-        window.location.href = "line://app";
-      }
+      }, 500);
 
       return;
     }
@@ -95,17 +102,24 @@ async function checkUser(uid) {
       renderProfile(u);
 
       if (FROM_LINE && window.liff) {
+
         hideLoading();
 
-        try {
-          if (liff.isInClient()) {
-            liff.closeWindow();
-          } else {
-            window.location.href = "line://app";
+        // 防止重複觸發
+        if (window.__closing) return;
+        window.__closing = true;
+
+        setTimeout(() => {
+          try {
+            if (liff.isInClient()) {
+              liff.closeWindow();
+            } else {
+              window.location.replace("line://app");
+            }
+          } catch (e) {
+            window.location.replace("line://app");
           }
-        } catch (e) {
-          window.location.href = "line://app";
-        }
+        }, 500);
 
         return;
       }
