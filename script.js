@@ -111,7 +111,17 @@ async function doRegister() {
   showLoading();
   try { 
     await callApi('register', {...vals, uid:currentUid}); 
-    alert('綁定成功！'); forceUpdate(); 
+    alert('✅ 綁定成功');
+
+    setTimeout(() => {
+      // ⭐ 只有「LINE進來」才關
+      if (FROM_LINE && window.liff && liff.isInClient()) {
+        liff.closeWindow();
+      } else {
+        // 非LINE → 留在頁面
+        forceUpdate();
+      }
+    }, 800);
   } catch(e) { hideLoading(); alert('綁定失敗: ' + e.message); }
 }
 
