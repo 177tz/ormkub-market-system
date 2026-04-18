@@ -3,6 +3,9 @@ const CONFIG = {
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
+const urlParams = new URLSearchParams(window.location.search);
+const FROM_LINE = urlParams.get("from") === "line";
+
 const APP_VERSION = 'v8.3.0 (Stable Pro)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
