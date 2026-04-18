@@ -49,16 +49,29 @@ function toggleGroup(header) {
 async function checkUser(uid) {
   const cacheKey = `ormkub_user_${uid}`;
   const cachedString = sessionStorage.getItem(cacheKey);
-  
+
   let cachedUser = null;
   if (cachedString) {
-    try { cachedUser = JSON.parse(cachedString); } 
-    catch(e) { sessionStorage.removeItem(cacheKey); }
+    try {
+      cachedUser = JSON.parse(cachedString);
+    } catch (e) {
+      sessionStorage.removeItem(cacheKey);
+    }
   }
 
   if (cachedUser) {
     currentUser = cachedUser;
     renderProfile(cachedUser);
+
+    // ⭐ 如果是從 LINE 進來，而且已能辨識會員，直接回 LINE
+    if (FROM_LINE && window.liff && liff.isInClient()) {
+      hideLoading();
+      setTimeout(() => {
+        liff.closeWindow();
+      }, 300);
+      return;
+    }
+
     hideLoading();
     showView('dashboard-view');
     handleUrlTab();
@@ -67,11 +80,22 @@ async function checkUser(uid) {
   }
 
   try {
-    const u = await callApi('checkUser', {uid});
+    const u = await callApi('checkUser', { uid });
+
     if (u) {
       sessionStorage.setItem(cacheKey, JSON.stringify(u));
       currentUser = u;
-      renderProfile(u); 
+      renderProfile(u);
+
+      // ⭐ 如果是從 LINE 進來，而且已能辨識會員，直接回 LINE
+      if (FROM_LINE && window.liff && liff.isInClient()) {
+        hideLoading();
+        setTimeout(() => {
+          liff.closeWindow();
+        }, 300);
+        return;
+      }
+
       if (!cachedUser) {
         hideLoading();
         showView('dashboard-view');
@@ -79,11 +103,18 @@ async function checkUser(uid) {
         loadMarkets(uid, true);
         loadOrders(uid, true);
       }
-    } else { 
-      if (!cachedUser) { hideLoading(); showView('register-view'); }
+    } else {
+      // ⭐ 查不到會員，才顯示註冊頁
+      if (!cachedUser) {
+        hideLoading();
+        showView('register-view');
+      }
     }
-  } catch (e) { 
-    if (!cachedUser) { hideLoading(); alert(e.message); }
+  } catch (e) {
+    if (!cachedUser) {
+      hideLoading();
+      alert(e.message);
+    }
   }
 }
 
