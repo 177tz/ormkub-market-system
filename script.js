@@ -1,6 +1,6 @@
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
-  LIFF_ID: '2008873691-AM28m7jo'
+  LIFF_ID: '2008874129-yXMzEm9u'
 };
 
 const urlParams = new URLSearchParams(window.location.search);
