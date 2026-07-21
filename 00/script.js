@@ -3,31 +3,101 @@ const CONFIG = {
   LIFF_ID: '2008873691-AM28m7jo'
 };
 
+// ============================================================
+// 🔐 舊帳號綁定驗證模式（LINE Bot 新綁定流程專用）
+// ------------------------------------------------------------
+// 這個頁面本身用的就是「舊 Provider」的 LIFF App（CONFIG.LIFF_ID），
+// liff.getProfile().userId 正是 Users A 欄 liff_uid 的來源，所以新的
+// 「用舊 liff_uid 驗證身分」綁定流程直接重用這個既有頁面，不另外新增頁面：
+// 網址帶 ?bind_token=xxx 時才會進入這個分支，完全不會執行下面 window.onload
+// 原本的會員登入／註冊／查單流程，對正式會員系統零影響。
+//
+// BIND_BACKEND_URL 是「LINE bot liff」Apps Script 專案（處理 LINE Webhook 與
+// bindByOldLiffUid 的那個專案，跟這個會員系統的 CONFIG.API_URL 是不同專案）
+// 部署成 Web App 後的網址。
+// ============================================================
+const BIND_CONFIG = {
+  BACKEND_URL: 'https://script.google.com/macros/s/AKfycbyy8rTyTay0D_QYeX6ZDuywFXFQWzZFbqeChmvZFjomZVfqxtmbM-CWChbwWmUY6uJy/exec'
+};
+
 const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
 const HAS_REDIRECTED = sessionStorage.getItem("__from_line_done") === "1";
+// 綁定驗證模式：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
+const BIND_TOKEN = urlParams.get("bind_token");
 
 const APP_VERSION = 'v8.3.0 (Stable Pro)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
-let currentOrdersData = []; 
+let currentOrdersData = [];
 
 window.onload = async () => {
   const vEl = document.getElementById('app-version-display');
   if(vEl) vEl.innerText = APP_VERSION;
+
+  // 🔐 綁定驗證模式：完全獨立的分支，不觸碰下面既有的會員系統邏輯。
+  if (BIND_TOKEN) {
+    await runBindTokenMode(BIND_TOKEN);
+    return;
+  }
 
   try {
     await liff.init({ liffId: CONFIG.LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
     currentUid = (await liff.getProfile()).userId;
     await checkUser(currentUid);
-  } catch (e) { 
-    console.error(e); hideLoading(); 
+  } catch (e) {
+    console.error(e); hideLoading();
     document.getElementById('m-body').innerText = '系統連線錯誤: ' + e.message;
     new bootstrap.Modal(document.getElementById('infoModal')).show();
   }
 };
+
+/**
+ * 舊帳號綁定驗證模式：用這個 LIFF App（舊 Provider）登入取得 oldLiffUid，
+ * 連同一次性 bind_token 一起送到「LINE bot liff」專案的 bindByOldLiffUid，
+ * 只顯示結果訊息，不進入會員 dashboard。
+ * @param {string} bindToken 網址帶入的一次性 token
+ */
+async function runBindTokenMode(bindToken) {
+  try {
+    await liff.init({ liffId: CONFIG.LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; } // 登入完成後會帶著同一個 bind_token 重新載入本頁
+
+    const profile = await liff.getProfile();
+    const oldLiffUid = profile.userId;
+
+    if (!BIND_CONFIG.BACKEND_URL || BIND_CONFIG.BACKEND_URL.indexOf('http') !== 0) {
+      hideLoading();
+      showBindResult('系統尚未設定完成，請聯繫管理員。');
+      return;
+    }
+
+    const resp = await fetch(BIND_CONFIG.BACKEND_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'bindByOldLiffUid',
+        bindToken: bindToken,
+        oldLiffUid: oldLiffUid
+      })
+    });
+    const result = await resp.json();
+
+    hideLoading();
+    showBindResult(result && result.message ? result.message : '系統錯誤，請聯繫管理員。');
+  } catch (e) {
+    console.error(e);
+    hideLoading();
+    showBindResult('系統錯誤，請聯繫管理員。');
+  }
+}
+
+/** 沿用既有的系統訊息 Modal 顯示綁定結果，不新增任何 HTML 結構。 */
+function showBindResult(text) {
+  document.getElementById('m-body').innerText = text;
+  new bootstrap.Modal(document.getElementById('infoModal')).show();
+}
 
 async function callApi(act, pay={}) {
   const r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({action: act, payload: pay}) });
