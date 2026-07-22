@@ -37,6 +37,17 @@ window.onerror = function(msg, url, line) {
     </div>
   </div>
 
+  <div id="old-member-transfer-view" class="container hidden fade-in" style="margin-top: 20px; position:relative; z-index:20;">
+    <div class="card-box">
+      <h4 class="fw-bold text-center mb-3">舊會員帳號轉移</h4>
+      <p class="text-center text-muted small mb-4">如果你之前已經使用過 Ormkub 會員系統，請完成一次舊帳號驗證。原有會員資料與訂單都會保留，不需要重新註冊。</p>
+      <button type="button" class="action-btn" onclick="startOldAccountTransfer()">驗證並轉移舊帳號</button>
+      <div class="text-center mt-3">
+        <button type="button" class="btn btn-link btn-sm text-muted" onclick="showView('register-view')">我是全新會員，前往註冊</button>
+      </div>
+    </div>
+  </div>
+
   <div id="register-view" class="container hidden fade-in" style="margin-top: 20px; position:relative; z-index:20;">
     <div class="card-box">
       <h4 class="fw-bold text-center mb-4">會員綁定</h4>
@@ -123,6 +134,7 @@ window.onerror = function(msg, url, line) {
       <div class="modal-body text-center p-4">
         <h5 class="fw-bold mb-3 text-secondary">系統訊息</h5>
         <p id="m-body" class="mb-4 text-dark"></p>
+        <button id="m-retry-btn" class="action-btn mb-2 hidden" onclick="retryLoginFromError_()">重新登入</button>
         <button class="action-btn" data-bs-dismiss="modal">關閉</button>
       </div>
     </div>

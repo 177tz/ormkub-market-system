@@ -24,14 +24,56 @@ const BIND_CONFIG = {
   BACKEND_URL: 'https://script.google.com/macros/s/AKfycbyy8rTyTay0D_QYeX6ZDuywFXFQWzZFbqeChmvZFjomZVfqxtmbM-CWChbwWmUY6uJy/exec'
 };
 
+// ============================================================
+// 🧯 安全版 sessionStorage 包裝
+// ------------------------------------------------------------
+// LINE App 內建瀏覽器或部分外部瀏覽器的無痕/隱私模式可能讓
+// sessionStorage 完全不可用（讀寫直接 throw）。這裡一律 try/catch，
+// 並額外用 localStorage 當作第二層備援（用於登入嘗試旗標等需要
+// 跨這次導轉存活的資料），最後才落到記憶體變數，確保任何環境都
+// 不會直接整頁掛掉，也不會因為存不住旗標而造成登入迴圈判斷失效。
+// ============================================================
+const __memoryStorage = {};
+
+function safeSessionGet_(key) {
+  try {
+    const v = sessionStorage.getItem(key);
+    if (v !== null) return v;
+  } catch (e) { /* sessionStorage 不可用，往下層備援 */ }
+  try {
+    const v = localStorage.getItem('__sf_' + key);
+    if (v !== null) return v;
+  } catch (e) { /* localStorage 也不可用 */ }
+  return __memoryStorage[key] !== undefined ? __memoryStorage[key] : null;
+}
+
+function safeSessionSet_(key, value) {
+  try { sessionStorage.setItem(key, value); } catch (e) { /* ignore */ }
+  try { localStorage.setItem('__sf_' + key, value); } catch (e) { /* ignore */ }
+  __memoryStorage[key] = value;
+}
+
+function safeSessionRemove_(key) {
+  try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('__sf_' + key); } catch (e) { /* ignore */ }
+  delete __memoryStorage[key];
+}
+
+function safeSessionClear_() {
+  try { sessionStorage.clear(); } catch (e) { /* ignore */ }
+  Object.keys(__memoryStorage).forEach((k) => delete __memoryStorage[k]);
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
-const HAS_REDIRECTED = sessionStorage.getItem("__from_line_done") === "1";
-// 舊會員轉移驗證模式：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
+const HAS_REDIRECTED = safeSessionGet_("__from_line_done") === "1";
+// 舊會員轉移驗證模式（LINE Bot 綁定流程專用）：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
 const BIND_TOKEN = urlParams.get("bind_token");
+// 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
+const SELF_TRANSFER = urlParams.get("self_transfer") === "1";
 
-const APP_VERSION = 'v9.0.0 (New Provider Primary)';
+const APP_VERSION = 'v9.1.0 (Login Loop Guard)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -40,16 +82,37 @@ window.onload = async () => {
   const vEl = document.getElementById('app-version-display');
   if(vEl) vEl.innerText = APP_VERSION;
 
+  // 「舊會員帳號轉移」自助流程：靠網址參數強制重新載入頁面，讓這次頁面生命週期
+  // 只 init 舊 Provider 的 LIFF，不跟下面新 Provider 的登入分支混在同一頁執行。
+  if (SELF_TRANSFER) {
+    await runSelfTransferMode();
+    return;
+  }
+
   try {
     // ✅ 新 Provider LIFF：日常登入唯一身分來源。
     await liff.init({ liffId: CONFIG.LIFF_ID });
-    if (!liff.isLoggedIn()) { liff.login(); return; }
+
+    if (!liff.isLoggedIn()) {
+      // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
+      // 若上一次已經呼叫過、這次回來仍是未登入狀態，代表 callback 沒有成功建立登入狀態，
+      // 停下來讓使用者看到明確錯誤與「重新登入」按鈕，不再自動重導。
+      const alreadyAttempted = safeSessionGet_('__login_attempted_new') === '1';
+      if (alreadyAttempted) {
+        showLoginError_('登入未完成或已逾時，請重新登入。');
+        return;
+      }
+      safeSessionSet_('__login_attempted_new', '1');
+      liff.login();
+      return;
+    }
+
+    safeSessionRemove_('__login_attempted_new');
     currentUid = (await liff.getProfile()).userId;
     await handleMemberLogin(currentUid);
   } catch (e) {
     console.error(e); hideLoading();
-    document.getElementById('m-body').innerText = '系統連線錯誤: ' + e.message;
-    new bootstrap.Modal(document.getElementById('infoModal')).show();
+    showLoginError_('系統連線錯誤: ' + e.message);
   }
 };
 
@@ -63,14 +126,14 @@ window.onload = async () => {
  */
 async function handleMemberLogin(newUid) {
   const cacheKey = `ormkub_member_${newUid}`;
-  const cachedString = sessionStorage.getItem(cacheKey);
+  const cachedString = safeSessionGet_(cacheKey);
 
   let cachedUser = null;
   if (cachedString) {
     try {
       cachedUser = JSON.parse(cachedString);
     } catch (e) {
-      sessionStorage.removeItem(cacheKey);
+      safeSessionRemove_(cacheKey);
     }
   }
 
@@ -103,7 +166,7 @@ async function handleMemberLogin(newUid) {
 
   if (result.code === 'FOUND') {
     const u = result.data;
-    sessionStorage.setItem(cacheKey, JSON.stringify(u));
+    safeSessionSet_(cacheKey, JSON.stringify(u));
     currentUser = u;
     renderProfile(u);
 
@@ -116,6 +179,8 @@ async function handleMemberLogin(newUid) {
       loadMarkets(newUid, true);
       loadOrders(newUid, true);
     }
+    // 成功登入且確定不是「等待關窗回跳」的流程時，清掉網址上的 callback 參數，回到乾淨首頁網址。
+    cleanupUrlIfNeeded_();
     return;
   }
 
@@ -125,7 +190,8 @@ async function handleMemberLogin(newUid) {
     if (BIND_TOKEN) {
       await runBindTokenMode(BIND_TOKEN);
     } else {
-      showView('register-view');
+      // 直接開站、新 UID 查 I 欄找不到：先給「舊會員帳號轉移」選項，不要直接跳去新會員註冊。
+      showView('old-member-transfer-view');
     }
   }
 }
@@ -140,7 +206,7 @@ function maybeCloseFromLine() {
   hideLoading();
   if (window.__closing) return true;
   window.__closing = true;
-  sessionStorage.setItem("__from_line_done", "1");
+  safeSessionSet_("__from_line_done", "1");
 
   setTimeout(() => {
     if (window.history && window.location.search.includes("from=line")) {
@@ -173,7 +239,19 @@ function maybeCloseFromLine() {
 async function runBindTokenMode(bindToken) {
   try {
     await liff.init({ liffId: OLD_LIFF_CONFIG.LIFF_ID }); // 舊 Provider，僅供舊會員轉移
-    if (!liff.isLoggedIn()) { liff.login(); return; } // 登入完成後會帶著同一個 bind_token 重新載入本頁
+
+    if (!liff.isLoggedIn()) {
+      // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
+      const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
+      if (alreadyAttempted) {
+        showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
+        return;
+      }
+      safeSessionSet_('__login_attempted_old', '1');
+      liff.login(); // 登入完成後會帶著同一個 bind_token 重新載入本頁
+      return;
+    }
+    safeSessionRemove_('__login_attempted_old');
 
     const profile = await liff.getProfile();
     const oldLiffUid = profile.userId;
@@ -205,8 +283,120 @@ async function runBindTokenMode(bindToken) {
   } catch (e) {
     console.error(e);
     hideLoading();
-    showBindResult('系統錯誤，請聯繫管理員。');
+    showLoginError_('系統錯誤，請聯繫管理員。');
   }
+}
+
+/**
+ * 使用者直接開站、新 UID 查 I 欄找不到時的「舊會員帳號轉移」自助流程（無 bind_token）。
+ * 沿用跟 runBindTokenMode 相同的「同一頁只 init 一個 LIFF App」原則：用網址參數
+ * self_transfer=1 強制重新整理頁面，新 UID 透過 safeSession 存起來跨這次 reload 傳遞，
+ * 不放進網址，維持既有「UID 不進網址」的安全原則。
+ */
+async function runSelfTransferMode() {
+  try {
+    const pendingNewUid = safeSessionGet_('pendingNewUid');
+    if (!pendingNewUid) {
+      // 沒有暫存的新 UID（例如被直接開啟 ?self_transfer=1），視為異常，導回乾淨首頁重新走正常登入。
+      window.location.replace(window.location.origin + window.location.pathname);
+      return;
+    }
+
+    await liff.init({ liffId: OLD_LIFF_CONFIG.LIFF_ID }); // 舊 Provider，僅供舊會員轉移
+
+    if (!liff.isLoggedIn()) {
+      const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
+      if (alreadyAttempted) {
+        showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
+        return;
+      }
+      safeSessionSet_('__login_attempted_old', '1');
+      liff.login();
+      return;
+    }
+    safeSessionRemove_('__login_attempted_old');
+
+    const profile = await liff.getProfile();
+    const oldLiffUid = profile.userId;
+
+    showLoading();
+    const result = await callMemberApi('linkOldAccount', { oldLiffUid: oldLiffUid, newLineUserId: pendingNewUid });
+    hideLoading();
+
+    const successCodes = ['BIND_SUCCESS', 'ALREADY_BOUND'];
+    if (result && successCodes.indexOf(result.code) !== -1 && result.data) {
+      // 轉移完成：交回一般登入流程重新確認並進入 dashboard，不在這裡另外維護一份 render 邏輯。
+      safeSessionRemove_('pendingNewUid');
+      cleanupUrlIfNeeded_();
+      return;
+    }
+
+    if (result && result.code === 'OLD_MEMBER_NOT_FOUND') {
+      currentUid = pendingNewUid;
+      safeSessionRemove_('pendingNewUid');
+      showView('register-view');
+      return;
+    }
+
+    // DUPLICATE_NEW_UID / BIND_CONFLICT / DUPLICATE_OLD_UID 等資料衝突：一律不自動處理，交由人工。
+    safeSessionRemove_('pendingNewUid');
+    showBindResult((result && result.message) || '系統資料異常，請聯絡管理員處理。');
+  } catch (e) {
+    console.error(e);
+    hideLoading();
+    showLoginError_('系統連線錯誤: ' + e.message);
+  }
+}
+
+/**
+ * 「驗證並轉移舊帳號」按鈕：把目前已知的新 UID 暫存起來，帶 self_transfer=1 重新整理頁面，
+ * 讓 runSelfTransferMode 在乾淨的頁面生命週期內完成舊帳號驗證。
+ */
+function startOldAccountTransfer() {
+  if (!currentUid) {
+    showBindResult('系統尚未取得您的登入資訊，請重新整理頁面後再試一次。');
+    return;
+  }
+  safeSessionSet_('pendingNewUid', currentUid);
+  showLoading();
+  window.location.replace(window.location.origin + window.location.pathname + '?self_transfer=1');
+}
+
+/**
+ * 清除網址上的一次性 callback／模式參數（from、bind_token、self_transfer 等），
+ * 回到乾淨的官方首頁網址。用 location.replace 是刻意的：不留在瀏覽紀錄裡，
+ * 避免使用者按上一頁又帶著舊參數重新觸發一次登入流程。
+ * 網址上已經沒有任何查詢參數時直接跳過，避免無意義的重複導轉。
+ */
+function cleanupUrlIfNeeded_() {
+  try {
+    if (!window.location.search) return;
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.location.replace(cleanUrl);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/**
+ * 登入／callback 發生無法自動復原的錯誤時的統一顯示：清楚錯誤訊息 + 「重新登入」按鈕，
+ * 不會自動重導回 LINE 登入，交由使用者主動點擊才會重新嘗試。
+ */
+function showLoginError_(message) {
+  hideLoading();
+  const body = document.getElementById('m-body');
+  const retryBtn = document.getElementById('m-retry-btn');
+  if (body) body.innerText = message;
+  if (retryBtn) retryBtn.classList.remove('hidden');
+  new bootstrap.Modal(document.getElementById('infoModal')).show();
+}
+
+/** 使用者主動點擊「重新登入」：清掉登入嘗試旗標與暫存狀態，重新整理回乾淨首頁重新走一次登入流程。 */
+function retryLoginFromError_() {
+  safeSessionRemove_('__login_attempted_new');
+  safeSessionRemove_('__login_attempted_old');
+  safeSessionRemove_('pendingNewUid');
+  window.location.replace(window.location.origin + window.location.pathname);
 }
 
 /**
@@ -234,8 +424,10 @@ async function showBindSuccessAndClose(message) {
   }
 }
 
-/** 沿用既有的系統訊息 Modal 顯示結果，不新增任何 HTML 結構。 */
+/** 沿用既有的系統訊息 Modal 顯示結果。非登入錯誤情境，重新登入按鈕維持隱藏。 */
 function showBindResult(text) {
+  const retryBtn = document.getElementById('m-retry-btn');
+  if (retryBtn) retryBtn.classList.add('hidden');
   document.getElementById('m-body').innerText = text;
   new bootstrap.Modal(document.getElementById('infoModal')).show();
 }
@@ -258,7 +450,7 @@ async function callMemberApi(act, pay={}) {
 }
 
 function forceUpdate() {
-  sessionStorage.clear();
+  safeSessionClear_();
   showLoading();
   location.reload();
 }
@@ -302,7 +494,7 @@ async function doRegister() {
 
     // REGISTER_SUCCESS（新註冊）或 FOUND（重複送出，沿用既有會員）都視為完成，不新增重複會員列。
     if (result.data) {
-      sessionStorage.setItem(`ormkub_member_${currentUid}`, JSON.stringify(result.data));
+      safeSessionSet_(`ormkub_member_${currentUid}`, JSON.stringify(result.data));
       currentUser = result.data;
     }
 
@@ -350,7 +542,7 @@ function switchTab(tab, btn) {
 async function loadMarkets(uid, isBackground = false) {
   const div = document.getElementById('market-list');
   const cacheKey = `ormkub_markets_${uid}`;
-  const cachedStr = sessionStorage.getItem(cacheKey);
+  const cachedStr = safeSessionGet_(cacheKey);
 
   if (cachedStr) {
     try { renderMarkets(JSON.parse(cachedStr)); loadedData.markets = true; } catch(e){}
@@ -359,7 +551,7 @@ async function loadMarkets(uid, isBackground = false) {
   }
   try {
     const mkts = await callApi('getMarkets', {uid});
-    sessionStorage.setItem(cacheKey, JSON.stringify(mkts));
+    safeSessionSet_(cacheKey, JSON.stringify(mkts));
     loadedData.markets = true;
     const currentTab = document.getElementById('tab-markets');
     if (!currentTab.classList.contains('hidden') || !cachedStr) renderMarkets(mkts);
@@ -374,12 +566,12 @@ function renderMarkets(mkts) {
 async function loadOrders(uid, isBackground = false) {
   const div = document.getElementById('orders-container');
   const cacheKey = `ormkub_orders_${uid}`;
-  const cachedStr = sessionStorage.getItem(cacheKey);
+  const cachedStr = safeSessionGet_(cacheKey);
 
   if (cachedStr) {
-    try { 
-      currentOrdersData = JSON.parse(cachedStr) || []; 
-      handleSortOrders(); loadedData.orders = true; 
+    try {
+      currentOrdersData = JSON.parse(cachedStr) || [];
+      handleSortOrders(); loadedData.orders = true;
     } catch(e){}
   } else if (!isBackground) {
     div.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">同步訂單中...</div></div>';
@@ -387,7 +579,7 @@ async function loadOrders(uid, isBackground = false) {
 
   try {
     const groups = await callApi('getOrders', {uid});
-    sessionStorage.setItem(cacheKey, JSON.stringify(groups || []));
+    safeSessionSet_(cacheKey, JSON.stringify(groups || []));
     loadedData.orders = true;
     currentOrdersData = groups || []; 
     const currentTab = document.getElementById('tab-orders');
@@ -460,7 +652,9 @@ function renderOrders(groups) {
 function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
 function showLoading() { document.getElementById('loading-overlay').classList.remove('hidden'); }
 function showView(id) {
-  document.getElementById('register-view').classList.add('hidden');
-  document.getElementById('dashboard-view').classList.add('hidden');
+  ['register-view', 'old-member-transfer-view', 'dashboard-view'].forEach((v) => {
+    const el = document.getElementById(v);
+    if (el) el.classList.add('hidden');
+  });
   document.getElementById(id).classList.remove('hidden');
 }
