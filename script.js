@@ -1,21 +1,25 @@
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
-  LIFF_ID: '2008873691-AM28m7jo'
+  // ✅ 新 Provider 的 Login LIFF：日常登入的唯一身分來源，取得的 userId 對應 Users I 欄 line_user_id。
+  // ⚠️ 外部相依：這個 LIFF App 在 LINE Developers Console 的 Endpoint URL 必須指向這個網站，
+  //    這件事無法從程式碼驗證，請務必人工確認。
+  LIFF_ID: '2008874129-yXMzEm9u'
 };
 
 // ============================================================
-// 🔐 舊帳號綁定驗證模式（LINE Bot 新綁定流程專用）
+// 🔐 舊會員轉移驗證模式（LINE Bot 綁定流程專用）
 // ------------------------------------------------------------
-// 這個頁面本身用的就是「舊 Provider」的 LIFF App（CONFIG.LIFF_ID），
-// liff.getProfile().userId 正是 Users A 欄 liff_uid 的來源，所以新的
-// 「用舊 liff_uid 驗證身分」綁定流程直接重用這個既有頁面，不另外新增頁面：
-// 網址帶 ?bind_token=xxx 時才會進入這個分支，完全不會執行下面 window.onload
-// 原本的會員登入／註冊／查單流程，對正式會員系統零影響。
+// 舊 Provider 的 LIFF App，只用於「舊會員轉移」：liff.getProfile().userId
+// 對應 Users A 欄 liff_uid。跟上面 CONFIG.LIFF_ID（新 Provider，日常登入）
+// 是兩個不同的 LIFF App，不可混用。網址帶 ?bind_token=xxx 時才會進入這個分支。
 //
-// BIND_BACKEND_URL 是「LINE bot liff」Apps Script 專案（處理 LINE Webhook 與
+// BIND_CONFIG.BACKEND_URL 是「LINE bot liff」Apps Script 專案（處理 LINE Webhook 與
 // bindByOldLiffUid 的那個專案，跟這個會員系統的 CONFIG.API_URL 是不同專案）
 // 部署成 Web App 後的網址。
 // ============================================================
+const OLD_LIFF_CONFIG = {
+  LIFF_ID: '2008873691-AM28m7jo'
+};
 const BIND_CONFIG = {
   BACKEND_URL: 'https://script.google.com/macros/s/AKfycbyy8rTyTay0D_QYeX6ZDuywFXFQWzZFbqeChmvZFjomZVfqxtmbM-CWChbwWmUY6uJy/exec'
 };
@@ -24,10 +28,10 @@ const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
 const HAS_REDIRECTED = sessionStorage.getItem("__from_line_done") === "1";
-// 綁定驗證模式：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
+// 舊會員轉移驗證模式：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
 const BIND_TOKEN = urlParams.get("bind_token");
 
-const APP_VERSION = 'v8.3.0 (Stable Pro)';
+const APP_VERSION = 'v9.0.0 (New Provider Primary)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -36,17 +40,12 @@ window.onload = async () => {
   const vEl = document.getElementById('app-version-display');
   if(vEl) vEl.innerText = APP_VERSION;
 
-  // 🔐 綁定驗證模式：完全獨立的分支，不觸碰下面既有的會員系統邏輯。
-  if (BIND_TOKEN) {
-    await runBindTokenMode(BIND_TOKEN);
-    return;
-  }
-
   try {
+    // ✅ 新 Provider LIFF：日常登入唯一身分來源。
     await liff.init({ liffId: CONFIG.LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
     currentUid = (await liff.getProfile()).userId;
-    await checkUser(currentUid);
+    await handleMemberLogin(currentUid);
   } catch (e) {
     console.error(e); hideLoading();
     document.getElementById('m-body').innerText = '系統連線錯誤: ' + e.message;
@@ -55,14 +54,125 @@ window.onload = async () => {
 };
 
 /**
- * 舊帳號綁定驗證模式：用這個 LIFF App（舊 Provider）登入取得 oldLiffUid，
+ * 統一的新登入判斷邏輯：用新 line_user_id 呼叫 checkUser，一律依 code 分流，
+ * 不靠 message 文字判斷。
+ *   FOUND              → 直接登入（不論 A 欄有無值，都視為正常會員，不要求重新註冊/綁定）
+ *   DUPLICATE_NEW_UID  → 停止登入，顯示資料異常
+ *   NOT_FOUND          → 有 bind_token 則進入舊會員轉移，否則顯示新會員註冊頁
+ * @param {string} newUid 新 Provider 的 line_user_id
+ */
+async function handleMemberLogin(newUid) {
+  const cacheKey = `ormkub_member_${newUid}`;
+  const cachedString = sessionStorage.getItem(cacheKey);
+
+  let cachedUser = null;
+  if (cachedString) {
+    try {
+      cachedUser = JSON.parse(cachedString);
+    } catch (e) {
+      sessionStorage.removeItem(cacheKey);
+    }
+  }
+
+  if (cachedUser) {
+    currentUser = cachedUser;
+    renderProfile(cachedUser);
+
+    if (maybeCloseFromLine()) return;
+
+    hideLoading();
+    showView('dashboard-view');
+    handleUrlTab();
+    loadMarkets(newUid, true);
+    loadOrders(newUid, true);
+  }
+
+  let result;
+  try {
+    result = await callMemberApi('checkUser', { uid: newUid });
+  } catch (e) {
+    if (!cachedUser) { hideLoading(); alert('系統連線錯誤：' + e.message); }
+    return;
+  }
+
+  if (result.code === 'DUPLICATE_NEW_UID') {
+    hideLoading();
+    showBindResult(result.message || '此 LINE 帳號對應到多筆會員資料，請聯絡管理員處理。');
+    return;
+  }
+
+  if (result.code === 'FOUND') {
+    const u = result.data;
+    sessionStorage.setItem(cacheKey, JSON.stringify(u));
+    currentUser = u;
+    renderProfile(u);
+
+    if (maybeCloseFromLine()) return;
+
+    if (!cachedUser) {
+      hideLoading();
+      showView('dashboard-view');
+      handleUrlTab();
+      loadMarkets(newUid, true);
+      loadOrders(newUid, true);
+    }
+    return;
+  }
+
+  // NOT_FOUND：只是拿得到新 UID，不代表已註冊。再判斷網址是否帶有效綁定 token。
+  if (!cachedUser) {
+    hideLoading();
+    if (BIND_TOKEN) {
+      await runBindTokenMode(BIND_TOKEN);
+    } else {
+      showView('register-view');
+    }
+  }
+}
+
+/**
+ * 封裝既有的「從 LINE 進來、登入成功後自動關窗／回跳」邏輯（原本在 checkUser 內重複兩次），
+ * 純粹抽成共用函式，行為完全不變。回傳 true 代表已處理（呼叫端應該直接 return）。
+ */
+function maybeCloseFromLine() {
+  if (!(FROM_LINE && !HAS_REDIRECTED && window.liff)) return false;
+
+  hideLoading();
+  if (window.__closing) return true;
+  window.__closing = true;
+  sessionStorage.setItem("__from_line_done", "1");
+
+  setTimeout(() => {
+    if (window.history && window.location.search.includes("from=line")) {
+      const newUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    try {
+      if (liff.isInClient()) {
+        liff.closeWindow();
+      } else {
+        window.location.replace("line://app");
+      }
+    } catch (e) {
+      window.location.replace("line://app");
+    }
+  }, 500);
+
+  return true;
+}
+
+/**
+ * 舊會員轉移驗證模式：用「舊 Provider」LIFF App 登入取得 oldLiffUid，
  * 連同一次性 bind_token 一起送到「LINE bot liff」專案的 bindByOldLiffUid，
  * 只顯示結果訊息，不進入會員 dashboard。
+ * ⚠️ 這裡故意不重新呼叫 liff.init() 切換 LIFF ID（LIFF SDK 同一頁面切換不同
+ * liffId 的行為未有官方保證），而是在最外層就已經走完全獨立的分支，
+ * 全頁生命週期內只會用到一個 LIFF App，降低風險。
  * @param {string} bindToken 網址帶入的一次性 token
  */
 async function runBindTokenMode(bindToken) {
   try {
-    await liff.init({ liffId: CONFIG.LIFF_ID });
+    await liff.init({ liffId: OLD_LIFF_CONFIG.LIFF_ID }); // 舊 Provider，僅供舊會員轉移
     if (!liff.isLoggedIn()) { liff.login(); return; } // 登入完成後會帶著同一個 bind_token 重新載入本頁
 
     const profile = await liff.getProfile();
@@ -85,7 +195,13 @@ async function runBindTokenMode(bindToken) {
     const result = await resp.json();
 
     hideLoading();
-    showBindResult(result && result.message ? result.message : '系統錯誤，請聯繫管理員。');
+
+    const successCodes = ['BIND_SUCCESS', 'ALREADY_BOUND'];
+    if (result && successCodes.indexOf(result.code) !== -1) {
+      await showBindSuccessAndClose(result.message || '綁定完成');
+    } else {
+      showBindResult((result && result.message) || '系統錯誤，請聯繫管理員。');
+    }
   } catch (e) {
     console.error(e);
     hideLoading();
@@ -93,17 +209,52 @@ async function runBindTokenMode(bindToken) {
   }
 }
 
-/** 沿用既有的系統訊息 Modal 顯示綁定結果，不新增任何 HTML 結構。 */
+/**
+ * 綁定成功／已完成綁定（ALREADY_BOUND）時：顯示完成訊息，等待約 1 秒，
+ * 在 LINE App 內優先嘗試自動關閉；不是 LINE App，或 closeWindow 失敗，
+ * 都會提供明確的 fallback 文字，不會停在沒有下一步指引的畫面，
+ * 也不會把已顯示的成功狀態改回失敗、更不會導回註冊頁。
+ */
+async function showBindSuccessAndClose(message) {
+  showBindResult(message);
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  if (!liff.isInClient()) {
+    showBindResult((message ? message + '\n\n' : '') + '請返回 LINE 繼續使用。');
+    return;
+  }
+
+  try {
+    liff.closeWindow();
+  } catch (e) {
+    console.error(e);
+    // closeWindow 失敗：成功狀態不變，但要給使用者明確可執行的下一步。
+    showBindResult((message ? message + '\n\n' : '') + '請手動關閉此頁面，或返回 LINE 繼續使用。');
+  }
+}
+
+/** 沿用既有的系統訊息 Modal 顯示結果，不新增任何 HTML 結構。 */
 function showBindResult(text) {
   document.getElementById('m-body').innerText = text;
   new bootstrap.Modal(document.getElementById('infoModal')).show();
 }
 
+/** getMarkets / getOrders 等既有查詢沿用：只靠 status 文字判斷，行為完全不變。 */
 async function callApi(act, pay={}) {
   const r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({action: act, payload: pay}) });
   const j = await r.json();
   if (j.status === 'error') throw new Error(j.message);
   return j.data;
+}
+
+/**
+ * 專供會員識別相關 action（checkUser / register）使用：回傳完整 {success,code,message,data}，
+ * 由呼叫端依 code 判斷，不像 callApi() 只靠 status 文字丟例外。
+ */
+async function callMemberApi(act, pay={}) {
+  const r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({action: act, payload: pay}) });
+  return await r.json();
 }
 
 function forceUpdate() {
@@ -116,123 +267,6 @@ function toggleGroup(header) {
   header.classList.toggle('active');
   const content = header.nextElementSibling;
   content.style.display = (content.style.display === 'none' || content.style.display === '') ? 'block' : 'none';
-}
-
-async function checkUser(uid) {
-  const cacheKey = `ormkub_user_${uid}`;
-  const cachedString = sessionStorage.getItem(cacheKey);
-
-  let cachedUser = null;
-  if (cachedString) {
-    try {
-      cachedUser = JSON.parse(cachedString);
-    } catch (e) {
-      sessionStorage.removeItem(cacheKey);
-    }
-  }
-
-  if (cachedUser) {
-    currentUser = cachedUser;
-    renderProfile(cachedUser);
-
-    if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
-
-      hideLoading();
-
-      // 防止重複觸發
-      if (window.__closing) return;
-      window.__closing = true;
-      sessionStorage.setItem("__from_line_done", "1");
-
-      setTimeout(() => {
-        // 移除 URL 參數避免循環
-        if (window.history && window.location.search.includes("from=line")) {
-          const newUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, newUrl);
-        }
-        try {
-          if (liff.isInClient()) {
-            liff.closeWindow();
-          } else {
-            window.location.replace("line://app");
-          }
-        } catch (e) {
-          window.location.replace("line://app");
-        }
-      }, 500);
-
-      return;
-    }
-
-    hideLoading();
-    showView('dashboard-view');
-    handleUrlTab();
-    loadMarkets(uid, true);
-    loadOrders(uid, true);
-  }
-
-  try {
-    const u = await callApi('checkUser', { uid });
-
-    if (u) {          
-      sessionStorage.setItem(cacheKey, JSON.stringify(u));
-      currentUser = u;
-      renderProfile(u);
-
-      // ⭐ 自動補寫 message UID
-      // ⭐ 通知 LINE 自動綁定
-      try {
-        await callApi('notifyBind', { liffUid: currentUid });
-      } catch (e) {}
-
-      if (FROM_LINE && !HAS_REDIRECTED && window.liff) {
-
-        hideLoading();
-
-        // 防止重複觸發
-        if (window.__closing) return;
-        window.__closing = true;
-        sessionStorage.setItem("__from_line_done", "1");
-
-        setTimeout(() => {
-          // 移除 URL 參數避免循環
-          if (window.history && window.location.search.includes("from=line")) {
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
-          }
-          try {
-            if (liff.isInClient()) {
-              liff.closeWindow();
-            } else {
-              window.location.replace("line://app");
-            }
-          } catch (e) {
-            window.location.replace("line://app");
-          }
-        }, 500);
-
-        return;
-      }
-      if (!cachedUser) {
-        hideLoading();
-        showView('dashboard-view');
-        handleUrlTab();
-        loadMarkets(uid, true);
-        loadOrders(uid, true);
-      }
-    } else {
-      // ⭐ 查不到會員，才顯示註冊頁
-      if (!cachedUser) {
-        hideLoading();
-        showView('register-view');
-      }
-    }
-  } catch (e) {
-    if (!cachedUser) {
-      hideLoading();
-      alert(e.message);
-    }
-  }
 }
 
 function handleUrlTab() {
@@ -257,8 +291,21 @@ async function doRegister() {
     vals[k] = el.value.trim();
   }
   showLoading();
-  try { 
-    await callApi('register', {...vals, uid:currentUid}); 
+  try {
+    const result = await callMemberApi('register', {...vals, uid: currentUid});
+
+    if (result.code === 'DUPLICATE_NEW_UID') {
+      hideLoading();
+      alert('系統資料異常，請聯絡管理員處理。');
+      return;
+    }
+
+    // REGISTER_SUCCESS（新註冊）或 FOUND（重複送出，沿用既有會員）都視為完成，不新增重複會員列。
+    if (result.data) {
+      sessionStorage.setItem(`ormkub_member_${currentUid}`, JSON.stringify(result.data));
+      currentUser = result.data;
+    }
+
     alert('✅ 綁定成功');
 
     setTimeout(() => {
