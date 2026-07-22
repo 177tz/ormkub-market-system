@@ -1,28 +1,75 @@
+// ============================================================
+// 🔑 LIFF ID 固定常數（唯一來源）
+// ------------------------------------------------------------
+// 兩個 LIFF App 的 ID 只能是這裡列出的固定字串，任何地方都不得從網址參數
+// （liffId、bind_token、mode 等使用者可修改的值）直接組出或覆寫這兩個值。
+//   newProvider：日常登入唯一身分來源，取得的 userId 對應 Users I 欄 line_user_id。
+//   oldProvider：僅供「舊會員轉移」比對，取得的 userId 對應 Users A 欄 liff_uid。
+// ⚠️ 外部相依：這兩個 LIFF App 在 LINE Developers Console 的 Endpoint URL 都必須指向
+//    這個網站，這件事無法從程式碼驗證，請務必人工確認。
+// ============================================================
+const LIFF_CONFIG = Object.freeze({
+  newProvider: '2008874129-yXMzEm9u',
+  oldProvider: '2008873691-AM28m7jo'
+});
+
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxAxlODopFrwlM2W2WGMv6Zq6sFVUjbz9XsEGbKeZRZp89qLhmdCtkwk4_IkTFucchQ/exec',
-  // ✅ 新 Provider 的 Login LIFF：日常登入的唯一身分來源，取得的 userId 對應 Users I 欄 line_user_id。
-  // ⚠️ 外部相依：這個 LIFF App 在 LINE Developers Console 的 Endpoint URL 必須指向這個網站，
-  //    這件事無法從程式碼驗證，請務必人工確認。
-  LIFF_ID: '2008874129-yXMzEm9u'
+  LIFF_ID: LIFF_CONFIG.newProvider
 };
 
 // ============================================================
-// 🔐 舊會員轉移驗證模式（LINE Bot 綁定流程專用）
+// 🔐 舊會員轉移驗證模式（LINE Bot 綁定流程 + 直接開站自助轉移共用）
 // ------------------------------------------------------------
 // 舊 Provider 的 LIFF App，只用於「舊會員轉移」：liff.getProfile().userId
-// 對應 Users A 欄 liff_uid。跟上面 CONFIG.LIFF_ID（新 Provider，日常登入）
-// 是兩個不同的 LIFF App，不可混用。網址帶 ?bind_token=xxx 時才會進入這個分支。
+// 對應 Users A 欄 liff_uid。跟 CONFIG.LIFF_ID（新 Provider，日常登入）
+// 是兩個不同的 LIFF App，同一次頁面生命週期只能 init 其中一個（見下方 MODE）。
 //
 // BIND_CONFIG.BACKEND_URL 是「LINE bot liff」Apps Script 專案（處理 LINE Webhook 與
 // bindByOldLiffUid 的那個專案，跟這個會員系統的 CONFIG.API_URL 是不同專案）
 // 部署成 Web App 後的網址。
 // ============================================================
 const OLD_LIFF_CONFIG = {
-  LIFF_ID: '2008873691-AM28m7jo'
+  LIFF_ID: LIFF_CONFIG.oldProvider
 };
 const BIND_CONFIG = {
   BACKEND_URL: 'https://script.google.com/macros/s/AKfycbyy8rTyTay0D_QYeX6ZDuywFXFQWzZFbqeChmvZFjomZVfqxtmbM-CWChbwWmUY6uJy/exec'
 };
+
+/**
+ * LIFF ID 格式防呆：只接受「數字-英數/底線/連字號」這種官方 LIFF ID 格式
+ * （例如 2008874129-yXMzEm9u），拒絕完整 https://liff.line.me/... URL、
+ * 空字串、undefined、null，或任何未解析過的原始值。
+ */
+function isValidLiffId(value) {
+  return typeof value === 'string'
+    && /^\d+-[A-Za-z0-9_-]+$/.test(value.trim());
+}
+
+/**
+ * 全站唯一呼叫 liff.init() 的入口。呼叫前先印診斷資訊、做格式防呆；
+ * 失敗時記錄詳細診斷（但絕不把 bind_token 或其他一次性 token 印在畫面上，
+ * 只印在 console）。liffId 一律來自 LIFF_CONFIG 固定常數，不接受外部傳入的原始字串。
+ * @param {string} liffId 必須是 LIFF_CONFIG.newProvider 或 LIFF_CONFIG.oldProvider
+ * @param {string} mode 診斷用途的流程名稱，例如 'new-primary' / 'old-bind-token' / 'old-self-transfer'
+ */
+async function initLiff_(liffId, mode) {
+  console.log('[LIFF_INIT]', { mode: mode, selectedProvider: liffId, liffId: liffId, href: window.location.href });
+
+  if (!isValidLiffId(liffId)) {
+    const err = new Error('liffId 格式不符，拒絕呼叫 liff.init()');
+    err.code = 'INVALID_LIFF_ID_FORMAT';
+    console.error('[LIFF_INIT_FAILED]', { code: err.code, message: err.message, liffId: liffId, mode: mode, href: window.location.href });
+    throw err;
+  }
+
+  try {
+    await liff.init({ liffId: liffId });
+  } catch (err) {
+    console.error('[LIFF_INIT_FAILED]', { code: err && err.code, message: err && err.message, liffId: liffId, mode: mode, href: window.location.href });
+    throw err;
+  }
+}
 
 // ============================================================
 // 🧯 安全版 sessionStorage 包裝
@@ -73,7 +120,17 @@ const BIND_TOKEN = urlParams.get("bind_token");
 // 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
 const SELF_TRANSFER = urlParams.get("self_transfer") === "1";
 
-const APP_VERSION = 'v9.1.0 (Login Loop Guard)';
+/**
+ * 這次頁面生命週期要走哪個流程，只由「網址有沒有帶對應參數」決定，不會讀取
+ * 任何使用者可修改的值來當作 liffId。三種模式互斥，且只有其中一種模式會被
+ * window.onload 執行，確保同一次頁面生命週期只會呼叫一次 liff.init()。
+ *   old-self-transfer → 只 init LIFF_CONFIG.oldProvider（runSelfTransferMode）
+ *   old-bind-token    → 只 init LIFF_CONFIG.oldProvider（runBindTokenMode）
+ *   new-primary       → 只 init LIFF_CONFIG.newProvider（一般會員登入）
+ */
+const MODE = SELF_TRANSFER ? 'old-self-transfer' : (BIND_TOKEN ? 'old-bind-token' : 'new-primary');
+
+const APP_VERSION = 'v9.2.0 (Single LIFF Init Per Page)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -82,16 +139,23 @@ window.onload = async () => {
   const vEl = document.getElementById('app-version-display');
   if(vEl) vEl.innerText = APP_VERSION;
 
-  // 「舊會員帳號轉移」自助流程：靠網址參數強制重新載入頁面，讓這次頁面生命週期
-  // 只 init 舊 Provider 的 LIFF，不跟下面新 Provider 的登入分支混在同一頁執行。
-  if (SELF_TRANSFER) {
+  // MODE 在網址參數解析當下就已經決定好，這裡只是照 MODE 分流，
+  // 三個分支互斥、每個分支各自只呼叫一次 liff.init()，同一次頁面生命週期
+  // 絕不會先 init 一個 LIFF ID、又在同一頁再 init 另一個 LIFF ID
+  // （這正是先前「Invalid LIFF ID」的根因：舊版程式碼會先 init 新 Provider，
+  // 直到 checkUser 回 NOT_FOUND 才發現網址帶 bind_token，才回頭 init 舊 Provider）。
+  if (MODE === 'old-self-transfer') {
     await runSelfTransferMode();
     return;
   }
+  if (MODE === 'old-bind-token') {
+    await runBindTokenMode(BIND_TOKEN);
+    return;
+  }
 
+  // MODE === 'new-primary'：一般會員登入，唯一身分來源。
   try {
-    // ✅ 新 Provider LIFF：日常登入唯一身分來源。
-    await liff.init({ liffId: CONFIG.LIFF_ID });
+    await initLiff_(LIFF_CONFIG.newProvider, MODE);
 
     if (!liff.isLoggedIn()) {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
@@ -112,16 +176,21 @@ window.onload = async () => {
     await handleMemberLogin(currentUid);
   } catch (e) {
     console.error(e); hideLoading();
-    showLoginError_('系統連線錯誤: ' + e.message);
+    if (e && e.code === 'INVALID_LIFF_ID_FORMAT') {
+      showLoginError_('系統設定錯誤，請聯絡管理員。');
+    } else {
+      showLoginError_('系統連線錯誤: ' + e.message);
+    }
   }
 };
 
 /**
  * 統一的新登入判斷邏輯：用新 line_user_id 呼叫 checkUser，一律依 code 分流，
- * 不靠 message 文字判斷。
+ * 不靠 message 文字判斷。只會在 MODE === 'new-primary' 時被呼叫
+ * （bind_token / self_transfer 模式在 window.onload 就已經分流走了，不會進來這裡）。
  *   FOUND              → 直接登入（不論 A 欄有無值，都視為正常會員，不要求重新註冊/綁定）
  *   DUPLICATE_NEW_UID  → 停止登入，顯示資料異常
- *   NOT_FOUND          → 有 bind_token 則進入舊會員轉移，否則顯示新會員註冊頁
+ *   NOT_FOUND          → 先給「舊會員帳號轉移」選項，不直接跳去新會員註冊頁
  * @param {string} newUid 新 Provider 的 line_user_id
  */
 async function handleMemberLogin(newUid) {
@@ -184,15 +253,12 @@ async function handleMemberLogin(newUid) {
     return;
   }
 
-  // NOT_FOUND：只是拿得到新 UID，不代表已註冊。再判斷網址是否帶有效綁定 token。
+  // NOT_FOUND：只是拿得到新 UID，不代表已註冊。這裡一定是 new-primary 模式
+  // （bind_token 模式已經在 window.onload 分流掉，不會執行到這行），
+  // 先給「舊會員帳號轉移」選項，不要直接跳去新會員註冊。
   if (!cachedUser) {
     hideLoading();
-    if (BIND_TOKEN) {
-      await runBindTokenMode(BIND_TOKEN);
-    } else {
-      // 直接開站、新 UID 查 I 欄找不到：先給「舊會員帳號轉移」選項，不要直接跳去新會員註冊。
-      showView('old-member-transfer-view');
-    }
+    showView('old-member-transfer-view');
   }
 }
 
@@ -231,14 +297,13 @@ function maybeCloseFromLine() {
  * 舊會員轉移驗證模式：用「舊 Provider」LIFF App 登入取得 oldLiffUid，
  * 連同一次性 bind_token 一起送到「LINE bot liff」專案的 bindByOldLiffUid，
  * 只顯示結果訊息，不進入會員 dashboard。
- * ⚠️ 這裡故意不重新呼叫 liff.init() 切換 LIFF ID（LIFF SDK 同一頁面切換不同
- * liffId 的行為未有官方保證），而是在最外層就已經走完全獨立的分支，
- * 全頁生命週期內只會用到一個 LIFF App，降低風險。
+ * 只會在 MODE === 'old-bind-token' 時被呼叫，這次頁面生命週期不會再有任何
+ * 其他分支呼叫 liff.init()，全頁只 init 這一個 LIFF App。
  * @param {string} bindToken 網址帶入的一次性 token
  */
 async function runBindTokenMode(bindToken) {
   try {
-    await liff.init({ liffId: OLD_LIFF_CONFIG.LIFF_ID }); // 舊 Provider，僅供舊會員轉移
+    await initLiff_(LIFF_CONFIG.oldProvider, 'old-bind-token'); // 舊 Provider，僅供舊會員轉移
 
     if (!liff.isLoggedIn()) {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
@@ -283,15 +348,19 @@ async function runBindTokenMode(bindToken) {
   } catch (e) {
     console.error(e);
     hideLoading();
-    showLoginError_('系統錯誤，請聯繫管理員。');
+    if (e && e.code === 'INVALID_LIFF_ID_FORMAT') {
+      showLoginError_('系統設定錯誤，請聯絡管理員。');
+    } else {
+      showLoginError_('系統錯誤，請聯繫管理員。');
+    }
   }
 }
 
 /**
  * 使用者直接開站、新 UID 查 I 欄找不到時的「舊會員帳號轉移」自助流程（無 bind_token）。
- * 沿用跟 runBindTokenMode 相同的「同一頁只 init 一個 LIFF App」原則：用網址參數
- * self_transfer=1 強制重新整理頁面，新 UID 透過 safeSession 存起來跨這次 reload 傳遞，
- * 不放進網址，維持既有「UID 不進網址」的安全原則。
+ * 只會在 MODE === 'old-self-transfer' 時被呼叫，這次頁面生命週期不會再有任何
+ * 其他分支呼叫 liff.init()，全頁只 init 這一個 LIFF App。新 UID 透過 safeSession
+ * 存起來跨這次 reload 傳遞，不放進網址，維持既有「UID 不進網址」的安全原則。
  */
 async function runSelfTransferMode() {
   try {
@@ -302,7 +371,7 @@ async function runSelfTransferMode() {
       return;
     }
 
-    await liff.init({ liffId: OLD_LIFF_CONFIG.LIFF_ID }); // 舊 Provider，僅供舊會員轉移
+    await initLiff_(LIFF_CONFIG.oldProvider, 'old-self-transfer'); // 舊 Provider，僅供舊會員轉移
 
     if (!liff.isLoggedIn()) {
       const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
@@ -344,7 +413,11 @@ async function runSelfTransferMode() {
   } catch (e) {
     console.error(e);
     hideLoading();
-    showLoginError_('系統連線錯誤: ' + e.message);
+    if (e && e.code === 'INVALID_LIFF_ID_FORMAT') {
+      showLoginError_('系統設定錯誤，請聯絡管理員。');
+    } else {
+      showLoginError_('系統連線錯誤: ' + e.message);
+    }
   }
 }
 
