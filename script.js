@@ -65,6 +65,7 @@ async function initLiff_(liffId, mode) {
 
   try {
     await liff.init({ liffId: liffId });
+    console.log('[LIFF_INIT_OK]', { mode: mode, liffId: liffId, href: window.location.href });
   } catch (err) {
     console.error('[LIFF_INIT_FAILED]', { code: err && err.code, message: err && err.message, liffId: liffId, mode: mode, href: window.location.href });
     throw err;
@@ -79,6 +80,15 @@ async function initLiff_(liffId, mode) {
  */
 function logLiffLoginState_(mode) {
   try {
+    let accessTokenPresent;
+    try { accessTokenPresent = !!(typeof liff.getAccessToken === 'function' && liff.getAccessToken()); } catch (e) { accessTokenPresent = 'ERROR:' + e.message; }
+
+    let context;
+    try { context = (typeof liff.getContext === 'function') ? liff.getContext() : undefined; } catch (e) { context = 'ERROR:' + e.message; }
+
+    let decodedIdToken;
+    try { decodedIdToken = (typeof liff.getDecodedIDToken === 'function') ? liff.getDecodedIDToken() : undefined; } catch (e) { decodedIdToken = 'ERROR:' + e.message; }
+
     console.log('[LIFF_LOGIN_STATE]', {
       mode: mode,
       isLoggedIn: liff.isLoggedIn(),
@@ -86,6 +96,9 @@ function logLiffLoginState_(mode) {
       os: (typeof liff.getOS === 'function') ? liff.getOS() : undefined,
       lineVersion: (typeof liff.getLineVersion === 'function') ? liff.getLineVersion() : undefined,
       liffSdkVersion: (typeof liff.getVersion === 'function') ? liff.getVersion() : undefined,
+      accessTokenPresent: accessTokenPresent,
+      context: context,
+      decodedIdToken: decodedIdToken,
       href: window.location.href,
       alreadyAttemptedFlag: safeSessionGet_('__login_attempted_old')
     });
@@ -133,6 +146,10 @@ function safeSessionClear_() {
   try { sessionStorage.clear(); } catch (e) { /* ignore */ }
   Object.keys(__memoryStorage).forEach((k) => delete __memoryStorage[k]);
 }
+
+// 診斷用：在解析任何網址參數之前，先原封不動印出瀏覽器實際landing的網址，
+// 排除「我們自己的程式碼在liff.init()之前就已經動過URL」這個可能性時的第一手證據。
+console.log('[RAW_LANDING_URL]', { href: window.location.href, search: window.location.search });
 
 const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
