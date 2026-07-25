@@ -200,25 +200,30 @@ let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
 
+// app-version 顯示跟 LIFF 登入無關，不需要等 window.onload，這裡先掛上去。
+const __appVersionEl = document.getElementById('app-version-display');
+if (__appVersionEl) __appVersionEl.innerText = APP_VERSION;
+
+// 🔒 根因修正：old-self-transfer / old-bind-token 這兩個模式的 liff.init()
+// 不能再等 window.onload 才呼叫——window.onload 要等 Google Fonts、Bootstrap CDN、
+// LIFF SDK 附加腳本等所有外部資源都載完才會觸發，這段等待期間 LIFF SDK 會自己
+// 提早把 OAuth callback 網址上的 code/state/liff.state 清乾淨（實測：script.js
+// 最頂層第一行 console.log('[RAW_LANDING_URL]') 印出來的網址就已經是清乾淨後的
+// ?self_transfer=1，此時 liff.init() 還沒被呼叫過），導致這組一次性 code 從未被
+// 拿去換 access token，liff.isLoggedIn() 永遠讀到 false，使用者明明按了 LINE 的
+// 「Log in」完成真實授權，卻還是看到「舊帳號登入未完成或已逾時」。
+// script.js 本身就放在 <body> 最後面，執行到這裡時 DOM 元素都已經 parse 完成，
+// 不需要等 DOMContentLoaded／window.onload 就能安全操作畫面，所以直接同步呼叫，
+// 讓 liff.init() 盡可能搶在 LIFF SDK 清網址之前拿到 code。
+if (MODE === 'old-self-transfer') {
+  runSelfTransferMode();
+} else if (MODE === 'old-bind-token') {
+  runBindTokenMode(BIND_TOKEN);
+} else {
+
+// MODE === 'new-primary'：一般會員登入，唯一身分來源。維持在 window.onload，
+// 行為與時機都不變。
 window.onload = async () => {
-  const vEl = document.getElementById('app-version-display');
-  if(vEl) vEl.innerText = APP_VERSION;
-
-  // MODE 在網址參數解析當下就已經決定好，這裡只是照 MODE 分流，
-  // 三個分支互斥、每個分支各自只呼叫一次 liff.init()，同一次頁面生命週期
-  // 絕不會先 init 一個 LIFF ID、又在同一頁再 init 另一個 LIFF ID
-  // （這正是先前「Invalid LIFF ID」的根因：舊版程式碼會先 init 新 Provider，
-  // 直到 checkUser 回 NOT_FOUND 才發現網址帶 bind_token，才回頭 init 舊 Provider）。
-  if (MODE === 'old-self-transfer') {
-    await runSelfTransferMode();
-    return;
-  }
-  if (MODE === 'old-bind-token') {
-    await runBindTokenMode(BIND_TOKEN);
-    return;
-  }
-
-  // MODE === 'new-primary'：一般會員登入，唯一身分來源。
   try {
     await initLiff_(LIFF_CONFIG.newProvider, MODE);
 
@@ -250,6 +255,8 @@ window.onload = async () => {
     }
   }
 };
+
+} // MODE === 'new-primary' 分支結束
 
 /**
  * 統一的新登入判斷邏輯：用新 line_user_id 呼叫 checkUser，一律依 code 分流，
