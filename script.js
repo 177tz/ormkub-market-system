@@ -190,7 +190,9 @@ window.onload = async () => {
         return;
       }
       safeSessionSet_('__login_attempted_new', '1');
-      liff.login();
+      // 明確帶 redirectUri=目前完整網址，避免 LIFF 預設只回跳到乾淨的 Endpoint URL、
+      // 把網址上的查詢參數（例如 tab）弄丟。
+      liff.login({ redirectUri: window.location.href });
       return;
     }
 
@@ -337,7 +339,12 @@ async function runBindTokenMode(bindToken) {
         return;
       }
       safeSessionSet_('__login_attempted_old', '1');
-      liff.login(); // 登入完成後會帶著同一個 bind_token 重新載入本頁
+      // 🔒 根因修正：LIFF 預設的登入回跳網址不會帶著目前網址的查詢參數，
+      // 只會跳回乾淨的 Endpoint URL——這會讓 bind_token 在回跳後直接消失，
+      // 頁面重新載入時 MODE 判斷不到 bind_token，誤判成 new-primary 模式，
+      // 導致整個舊帳號綁定流程卡死。明確帶 redirectUri=目前完整網址
+      // （含 ?bind_token=xxx），登入完成後才能正確帶著同一個 bind_token 回來。
+      liff.login({ redirectUri: window.location.href });
       return;
     }
     safeSessionRemove_('__login_attempted_old');
@@ -405,7 +412,10 @@ async function runSelfTransferMode() {
         return;
       }
       safeSessionSet_('__login_attempted_old', '1');
-      liff.login();
+      // 🔒 根因修正：理由同 runBindTokenMode()——LIFF 預設回跳網址會弄丟
+      // ?self_transfer=1，導致回來後 MODE 誤判成 new-primary，自助轉移流程
+      // 卡死回到原點。明確帶 redirectUri=目前完整網址（含 ?self_transfer=1）。
+      liff.login({ redirectUri: window.location.href });
       return;
     }
     safeSessionRemove_('__login_attempted_old');
