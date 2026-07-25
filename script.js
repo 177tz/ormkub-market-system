@@ -100,7 +100,7 @@ function logLiffLoginState_(mode) {
       context: context,
       decodedIdToken: decodedIdToken,
       href: window.location.href,
-      alreadyAttemptedFlag: safeSessionGet_('__login_attempted_old')
+      alreadyAttemptedFlag: sessionOnlyGet_('__login_attempted_old')
     });
   } catch (e) {
     console.error('[LIFF_LOGIN_STATE_LOG_FAILED]', e && e.message);
@@ -147,6 +147,31 @@ function safeSessionClear_() {
   Object.keys(__memoryStorage).forEach((k) => delete __memoryStorage[k]);
 }
 
+// ============================================================
+// 🚫 純 sessionStorage 版（不落地 localStorage）
+// ------------------------------------------------------------
+// 專供「這次頁面生命週期內只做一次」的旗標使用（例如登入嘗試次數、
+// 從 LINE 進來是否已自動關窗），語意上就是要跟著分頁/瀏覽階段結束
+// 而消失，不該像 safeSessionSet_ 一樣備援寫進永不過期的 localStorage，
+// 否則會變成一次失敗就永久卡死，直到使用者手動清除瀏覽器資料為止。
+// ============================================================
+function sessionOnlyGet_(key) {
+  try {
+    return sessionStorage.getItem(key);
+  } catch (e) { /* sessionStorage 不可用，往下層備援 */ }
+  return __memoryStorage[key] !== undefined ? __memoryStorage[key] : null;
+}
+
+function sessionOnlySet_(key, value) {
+  try { sessionStorage.setItem(key, value); } catch (e) { /* ignore */ }
+  __memoryStorage[key] = value;
+}
+
+function sessionOnlyRemove_(key) {
+  try { sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+  delete __memoryStorage[key];
+}
+
 // 診斷用：在解析任何網址參數之前，先原封不動印出瀏覽器實際landing的網址，
 // 排除「我們自己的程式碼在liff.init()之前就已經動過URL」這個可能性時的第一手證據。
 console.log('[RAW_LANDING_URL]', { href: window.location.href, search: window.location.search });
@@ -154,7 +179,7 @@ console.log('[RAW_LANDING_URL]', { href: window.location.href, search: window.lo
 const urlParams = new URLSearchParams(window.location.search);
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
-const HAS_REDIRECTED = safeSessionGet_("__from_line_done") === "1";
+const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
 // 舊會員轉移驗證模式（LINE Bot 綁定流程專用）：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
 const BIND_TOKEN = urlParams.get("bind_token");
 // 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
@@ -201,19 +226,19 @@ window.onload = async () => {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
       // 若上一次已經呼叫過、這次回來仍是未登入狀態，代表 callback 沒有成功建立登入狀態，
       // 停下來讓使用者看到明確錯誤與「重新登入」按鈕，不再自動重導。
-      const alreadyAttempted = safeSessionGet_('__login_attempted_new') === '1';
+      const alreadyAttempted = sessionOnlyGet_('__login_attempted_new') === '1';
       if (alreadyAttempted) {
         showLoginError_('登入未完成或已逾時，請重新登入。');
         return;
       }
-      safeSessionSet_('__login_attempted_new', '1');
+      sessionOnlySet_('__login_attempted_new', '1');
       // 明確帶 redirectUri=目前完整網址，避免 LIFF 預設只回跳到乾淨的 Endpoint URL、
       // 把網址上的查詢參數（例如 tab）弄丟。
       liff.login({ redirectUri: window.location.href });
       return;
     }
 
-    safeSessionRemove_('__login_attempted_new');
+    sessionOnlyRemove_('__login_attempted_new');
     currentUid = (await liff.getProfile()).userId;
     await handleMemberLogin(currentUid);
   } catch (e) {
@@ -314,7 +339,7 @@ function maybeCloseFromLine() {
   hideLoading();
   if (window.__closing) return true;
   window.__closing = true;
-  safeSessionSet_("__from_line_done", "1");
+  sessionOnlySet_("__from_line_done", "1");
 
   setTimeout(() => {
     if (window.history && window.location.search.includes("from=line")) {
@@ -350,12 +375,12 @@ async function runBindTokenMode(bindToken) {
 
     if (!liff.isLoggedIn()) {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
-      const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
+      const alreadyAttempted = sessionOnlyGet_('__login_attempted_old') === '1';
       if (alreadyAttempted) {
         showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
         return;
       }
-      safeSessionSet_('__login_attempted_old', '1');
+      sessionOnlySet_('__login_attempted_old', '1');
       // 🔒 根因修正：LIFF 預設的登入回跳網址不會帶著目前網址的查詢參數，
       // 只會跳回乾淨的 Endpoint URL——這會讓 bind_token 在回跳後直接消失，
       // 頁面重新載入時 MODE 判斷不到 bind_token，誤判成 new-primary 模式，
@@ -364,7 +389,7 @@ async function runBindTokenMode(bindToken) {
       liff.login({ redirectUri: window.location.href });
       return;
     }
-    safeSessionRemove_('__login_attempted_old');
+    sessionOnlyRemove_('__login_attempted_old');
 
     const profile = await liff.getProfile();
     const oldLiffUid = profile.userId;
@@ -423,19 +448,19 @@ async function runSelfTransferMode() {
     logLiffLoginState_('old-self-transfer');
 
     if (!liff.isLoggedIn()) {
-      const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
+      const alreadyAttempted = sessionOnlyGet_('__login_attempted_old') === '1';
       if (alreadyAttempted) {
         showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
         return;
       }
-      safeSessionSet_('__login_attempted_old', '1');
+      sessionOnlySet_('__login_attempted_old', '1');
       // 🔒 根因修正：理由同 runBindTokenMode()——LIFF 預設回跳網址會弄丟
       // ?self_transfer=1，導致回來後 MODE 誤判成 new-primary，自助轉移流程
       // 卡死回到原點。明確帶 redirectUri=目前完整網址（含 ?self_transfer=1）。
       liff.login({ redirectUri: window.location.href });
       return;
     }
-    safeSessionRemove_('__login_attempted_old');
+    sessionOnlyRemove_('__login_attempted_old');
 
     const profile = await liff.getProfile();
     const oldLiffUid = profile.userId;
@@ -518,8 +543,8 @@ function showLoginError_(message) {
 
 /** 使用者主動點擊「重新登入」：清掉登入嘗試旗標與暫存狀態，重新整理回乾淨首頁重新走一次登入流程。 */
 function retryLoginFromError_() {
-  safeSessionRemove_('__login_attempted_new');
-  safeSessionRemove_('__login_attempted_old');
+  sessionOnlyRemove_('__login_attempted_new');
+  sessionOnlyRemove_('__login_attempted_old');
   safeSessionRemove_('pendingNewUid');
   window.location.replace(window.location.origin + window.location.pathname);
 }
