@@ -71,6 +71,29 @@ async function initLiff_(liffId, mode) {
   }
 }
 
+/**
+ * 診斷用：在 liff.init() 成功之後、判斷 isLoggedIn() 之前，記錄目前 LIFF SDK
+ * 看到的環境狀態。純讀取，不影響任何登入判斷邏輯，只是為了排查「liff.init()
+ * 沒有丟錯，但 isLoggedIn() 一直是 false」這類無法從程式碼直接重現的問題，
+ * 用來確認舊 Provider LIFF App（LIFF_CONFIG.oldProvider）在實機上的實際狀態。
+ */
+function logLiffLoginState_(mode) {
+  try {
+    console.log('[LIFF_LOGIN_STATE]', {
+      mode: mode,
+      isLoggedIn: liff.isLoggedIn(),
+      isInClient: liff.isInClient(),
+      os: (typeof liff.getOS === 'function') ? liff.getOS() : undefined,
+      lineVersion: (typeof liff.getLineVersion === 'function') ? liff.getLineVersion() : undefined,
+      liffSdkVersion: (typeof liff.getVersion === 'function') ? liff.getVersion() : undefined,
+      href: window.location.href,
+      alreadyAttemptedFlag: safeSessionGet_('__login_attempted_old')
+    });
+  } catch (e) {
+    console.error('[LIFF_LOGIN_STATE_LOG_FAILED]', e && e.message);
+  }
+}
+
 // ============================================================
 // 🧯 安全版 sessionStorage 包裝
 // ------------------------------------------------------------
@@ -304,6 +327,7 @@ function maybeCloseFromLine() {
 async function runBindTokenMode(bindToken) {
   try {
     await initLiff_(LIFF_CONFIG.oldProvider, 'old-bind-token'); // 舊 Provider，僅供舊會員轉移
+    logLiffLoginState_('old-bind-token');
 
     if (!liff.isLoggedIn()) {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
@@ -372,6 +396,7 @@ async function runSelfTransferMode() {
     }
 
     await initLiff_(LIFF_CONFIG.oldProvider, 'old-self-transfer'); // 舊 Provider，僅供舊會員轉移
+    logLiffLoginState_('old-self-transfer');
 
     if (!liff.isLoggedIn()) {
       const alreadyAttempted = safeSessionGet_('__login_attempted_old') === '1';
