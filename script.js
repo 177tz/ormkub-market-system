@@ -181,9 +181,21 @@ const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
 const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
 // 舊會員轉移驗證模式（LINE Bot 綁定流程專用）：網址帶這個參數才會觸發，只放一次性 token，不含任何 UID。
-const BIND_TOKEN = urlParams.get("bind_token");
+// 🔒 根因修正（取代 978a647 的 pin redirectUri 做法）：liff.login() 帶自訂
+// redirectUri（含 ?bind_token=xxx 這種額外 query string）會觸發 LIFF SDK 的
+// liff.state 包裝機制，這條路徑目前對舊 Provider 會讓 code 換不到 token，
+// 導致 isLoggedIn() 永遠是 false（見 2026-07-25 的實測記錄）。改回不帶
+// redirectUri 呼叫 liff.login()（讓 SDK 用預設行為跳回乾淨的 Endpoint URL），
+// bind_token 改成跟 pendingNewUid 一樣先存進 safeSession，登入回跳後從這裡讀回來，
+// 不再依賴網址上的 query string 撐過整趟 OAuth 往返。
+const urlBindToken = urlParams.get("bind_token");
+if (urlBindToken) safeSessionSet_('pendingBindToken', urlBindToken);
+const BIND_TOKEN = urlBindToken || safeSessionGet_('pendingBindToken');
 // 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
-const SELF_TRANSFER = urlParams.get("self_transfer") === "1";
+// 同上，不能再靠網址的 ?self_transfer=1 撐過 OAuth 往返，一樣先存進 safeSession。
+const urlSelfTransfer = urlParams.get("self_transfer") === "1";
+if (urlSelfTransfer) safeSessionSet_('pendingSelfTransfer', '1');
+const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') === '1';
 
 /**
  * 這次頁面生命週期要走哪個流程，只由「網址有沒有帶對應參數」決定，不會讀取
@@ -388,12 +400,13 @@ async function runBindTokenMode(bindToken) {
         return;
       }
       sessionOnlySet_('__login_attempted_old', '1');
-      // 🔒 根因修正：LIFF 預設的登入回跳網址不會帶著目前網址的查詢參數，
-      // 只會跳回乾淨的 Endpoint URL——這會讓 bind_token 在回跳後直接消失，
-      // 頁面重新載入時 MODE 判斷不到 bind_token，誤判成 new-primary 模式，
-      // 導致整個舊帳號綁定流程卡死。明確帶 redirectUri=目前完整網址
-      // （含 ?bind_token=xxx），登入完成後才能正確帶著同一個 bind_token 回來。
-      liff.login({ redirectUri: window.location.href });
+      // 🔒 根因修正（2026-07-25）：改回不帶 redirectUri 呼叫 liff.login()。
+      // bind_token 已經在檔案最上面存進 safeSession（見 pendingBindToken），
+      // 不再需要靠 redirectUri 把 query string 從網址帶過整趟 OAuth 往返——
+      // 帶自訂 redirectUri（含額外 query string）會觸發 LIFF SDK 的 liff.state
+      // 包裝機制，這條路徑目前對舊 Provider 會讓 code 換不到 token，
+      // 導致 isLoggedIn() 永遠是 false（詳見同日的實測記錄）。
+      liff.login();
       return;
     }
     sessionOnlyRemove_('__login_attempted_old');
@@ -418,6 +431,9 @@ async function runBindTokenMode(bindToken) {
     const result = await resp.json();
 
     hideLoading();
+    // 這次 bind_token 的嘗試已經有明確結果（成功或失敗），不論哪一種都不再需要
+    // 繼續留著這個一次性 token，清掉避免使用者重新整理頁面時又重跑一次舊流程。
+    safeSessionRemove_('pendingBindToken');
 
     const successCodes = ['BIND_SUCCESS', 'ALREADY_BOUND'];
     if (result && successCodes.indexOf(result.code) !== -1) {
@@ -461,10 +477,11 @@ async function runSelfTransferMode() {
         return;
       }
       sessionOnlySet_('__login_attempted_old', '1');
-      // 🔒 根因修正：理由同 runBindTokenMode()——LIFF 預設回跳網址會弄丟
-      // ?self_transfer=1，導致回來後 MODE 誤判成 new-primary，自助轉移流程
-      // 卡死回到原點。明確帶 redirectUri=目前完整網址（含 ?self_transfer=1）。
-      liff.login({ redirectUri: window.location.href });
+      // 🔒 根因修正（2026-07-25）：理由同 runBindTokenMode()——改回不帶
+      // redirectUri 呼叫 liff.login()。self_transfer 意圖已經在檔案最上面
+      // 存進 safeSession（見 pendingSelfTransfer），不再需要靠 redirectUri
+      // 把 ?self_transfer=1 帶過整趟 OAuth 往返。
+      liff.login();
       return;
     }
     sessionOnlyRemove_('__login_attempted_old');
@@ -480,6 +497,7 @@ async function runSelfTransferMode() {
     if (result && successCodes.indexOf(result.code) !== -1 && result.data) {
       // 轉移完成：交回一般登入流程重新確認並進入 dashboard，不在這裡另外維護一份 render 邏輯。
       safeSessionRemove_('pendingNewUid');
+      safeSessionRemove_('pendingSelfTransfer');
       cleanupUrlIfNeeded_();
       return;
     }
@@ -487,12 +505,14 @@ async function runSelfTransferMode() {
     if (result && result.code === 'OLD_MEMBER_NOT_FOUND') {
       currentUid = pendingNewUid;
       safeSessionRemove_('pendingNewUid');
+      safeSessionRemove_('pendingSelfTransfer');
       showView('register-view');
       return;
     }
 
     // DUPLICATE_NEW_UID / BIND_CONFLICT / DUPLICATE_OLD_UID 等資料衝突：一律不自動處理，交由人工。
     safeSessionRemove_('pendingNewUid');
+    safeSessionRemove_('pendingSelfTransfer');
     showBindResult((result && result.message) || '系統資料異常，請聯絡管理員處理。');
   } catch (e) {
     console.error(e);
@@ -553,6 +573,8 @@ function retryLoginFromError_() {
   sessionOnlyRemove_('__login_attempted_new');
   sessionOnlyRemove_('__login_attempted_old');
   safeSessionRemove_('pendingNewUid');
+  safeSessionRemove_('pendingBindToken');
+  safeSessionRemove_('pendingSelfTransfer');
   window.location.replace(window.location.origin + window.location.pathname);
 }
 
