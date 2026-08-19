@@ -34,7 +34,7 @@ window.onerror = function(msg, url, line) {
 
 <div id="app">
   <div id="pwa-install-banner" class="pwa-banner hidden">
-    <i class="bi bi-download pwa-banner-icon"></i>
+    <img src="icons/icon-192.png" alt="" class="pwa-banner-icon">
     <div class="pwa-banner-text" id="pwa-banner-text">加到手機桌面，下次不用再回 LINE 找連結</div>
     <button type="button" id="pwa-install-btn" class="pwa-banner-btn hidden">加入桌面</button>
     <button type="button" id="pwa-banner-close" class="pwa-banner-close" aria-label="關閉">&times;</button>
@@ -190,18 +190,23 @@ if ('serviceWorker' in navigator) {
 
   var deferredPrompt = null;
 
+  function showBanner() {
+    banner.classList.remove('hidden');
+    banner.classList.add('fade-in');
+  }
+
   if (isInLineApp()) {
     textEl.textContent = '加到手機桌面，下次不用再回 LINE 找連結：點右上角「⋯」選「在瀏覽器中開啟」，再依畫面指示加入主畫面';
-    banner.classList.remove('hidden');
+    showBanner();
   } else if (isIOS()) {
     textEl.textContent = '加到手機桌面，下次不用再回 LINE 找連結：點下方的分享按鈕 →「加入主畫面」';
-    banner.classList.remove('hidden');
+    showBanner();
   } else {
     window.addEventListener('beforeinstallprompt', function (e) {
       e.preventDefault();
       deferredPrompt = e;
       installBtn.classList.remove('hidden');
-      banner.classList.remove('hidden');
+      showBanner();
     });
   }
 

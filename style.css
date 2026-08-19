@@ -26,11 +26,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI"
 #loading-overlay { position: fixed; inset: 0; background: rgba(244, 236, 225, 0.9); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 #loading-overlay .spinner-border { color: var(--ink) !important; }
 
-.pwa-banner { display: flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; padding: 10px 16px; font-size: 12.5px; font-weight: 600; line-height: 1.4; position: sticky; top: 0; z-index: 30; }
-.pwa-banner-icon { font-size: 16px; color: var(--yellow); flex-shrink: 0; }
-.pwa-banner-text { flex: 1; }
-.pwa-banner-btn { background: var(--yellow); color: var(--yellow-ink); border: none; border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
-.pwa-banner-close { background: none; border: none; color: rgba(255,255,255,0.65); font-size: 20px; line-height: 1; padding: 0 2px; flex-shrink: 0; }
+.pwa-banner { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(11, 42, 76, 0.08); padding: 14px 14px 14px 16px; margin: 16px 16px 0; }
+.pwa-banner-icon { width: 42px; height: 42px; border-radius: 13px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(253, 199, 6, 0.4); }
+.pwa-banner-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-main); line-height: 1.45; }
+.pwa-banner-btn { background: var(--yellow); color: var(--yellow-ink); border: none; border-radius: 999px; padding: 9px 16px; font-size: 12.5px; font-weight: 800; white-space: nowrap; flex-shrink: 0; box-shadow: 0 4px 12px rgba(253, 199, 6, 0.35); transition: transform 0.15s ease; }
+.pwa-banner-btn:active { transform: scale(0.95); }
+.pwa-banner-close { background: none; border: none; color: var(--text-sub); font-size: 18px; line-height: 1; padding: 4px; flex-shrink: 0; opacity: 0.7; }
+.pwa-banner-close:active { opacity: 1; }
 
 .welcome-section { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border-bottom: 1px solid var(--border-color); padding: 20px 20px 15px 20px; position: sticky; top: 0; z-index: 10; }
 .user-info h5 { font-weight: 800; margin: 0; font-size: 22px; letter-spacing: 0.5px; color: var(--dusk-blue); } .user-info p { color: var(--text-sub); font-size: 0.85rem; margin: 0; font-weight: 500; }
