@@ -33,6 +33,13 @@ window.onerror = function(msg, url, line) {
 </script>
 
 <div id="app">
+  <div id="pwa-install-banner" class="pwa-banner hidden">
+    <i class="bi bi-download pwa-banner-icon"></i>
+    <div class="pwa-banner-text" id="pwa-banner-text">加到手機桌面，下次不用再回 LINE 找連結</div>
+    <button type="button" id="pwa-install-btn" class="pwa-banner-btn hidden">加入桌面</button>
+    <button type="button" id="pwa-banner-close" class="pwa-banner-close" aria-label="關閉">&times;</button>
+  </div>
+
   <div class="welcome-section">
     <div class="d-flex justify-content-between align-items-center user-info">
       <div>
@@ -156,6 +163,68 @@ window.onerror = function(msg, url, line) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(function () {});
 }
+</script>
+<script>
+// 加入桌面提示。跟 LIFF 登入流程完全獨立、不依賴 liff.init() 有沒有跑完，
+// 只用 User-Agent／display-mode 判斷，避免動到 script.js 裡對時機很敏感的登入邏輯。
+(function () {
+  var banner = document.getElementById('pwa-install-banner');
+  var textEl = document.getElementById('pwa-banner-text');
+  var installBtn = document.getElementById('pwa-install-btn');
+  var closeBtn = document.getElementById('pwa-banner-close');
+  if (!banner) return;
+
+  var DISMISS_KEY = 'pwaInstallBannerDismissed';
+
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+  function isInLineApp() {
+    return /\bLine\//i.test(navigator.userAgent);
+  }
+  function isIOS() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  }
+
+  if (isStandalone() || localStorage.getItem(DISMISS_KEY) === '1') return;
+
+  var deferredPrompt = null;
+
+  if (isInLineApp()) {
+    textEl.textContent = '加到手機桌面，下次不用再回 LINE 找連結：點右上角「⋯」選「在瀏覽器中開啟」，再依畫面指示加入主畫面';
+    banner.classList.remove('hidden');
+  } else if (isIOS()) {
+    textEl.textContent = '加到手機桌面，下次不用再回 LINE 找連結：點下方的分享按鈕 →「加入主畫面」';
+    banner.classList.remove('hidden');
+  } else {
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.classList.remove('hidden');
+      banner.classList.remove('hidden');
+    });
+  }
+
+  installBtn.addEventListener('click', function () {
+    if (!deferredPrompt) return;
+    installBtn.disabled = true;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.finally(function () {
+      deferredPrompt = null;
+      banner.classList.add('hidden');
+    });
+  });
+
+  closeBtn.addEventListener('click', function () {
+    banner.classList.add('hidden');
+    localStorage.setItem(DISMISS_KEY, '1');
+  });
+
+  window.addEventListener('appinstalled', function () {
+    banner.classList.add('hidden');
+    localStorage.setItem(DISMISS_KEY, '1');
+  });
+})();
 </script>
 </body>
 </html>
