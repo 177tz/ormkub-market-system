@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>私密保險箱</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12203B">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="保險箱">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- 首次設定主密碼 -->
+<div id="setup-view" class="screen hidden">
+  <div class="auth-card fade-in">
+    <div class="lock-icon">🔒</div>
+    <h1>建立你的保險箱</h1>
+    <p class="muted">設定一組主密碼。所有資料只會用這組密碼在<strong>你的裝置上</strong>加密與解密,不會上傳到任何伺服器。<br><strong>忘記主密碼將無法救回資料,請務必牢記。</strong></p>
+    <form id="setup-form" autocomplete="off">
+      <label class="field-label">主密碼</label>
+      <input type="password" id="setup-pw1" class="text-input" placeholder="至少 8 個字元" required minlength="8" autocomplete="new-password">
+      <label class="field-label">再輸入一次</label>
+      <input type="password" id="setup-pw2" class="text-input" placeholder="確認主密碼" required minlength="8" autocomplete="new-password">
+      <div id="setup-error" class="form-error hidden"></div>
+      <button type="submit" class="btn-primary">建立保險箱</button>
+    </form>
+  </div>
+</div>
+
+<!-- 解鎖畫面 -->
+<div id="unlock-view" class="screen hidden">
+  <div class="auth-card fade-in">
+    <div class="lock-icon">🔒</div>
+    <h1>已鎖定</h1>
+    <p class="muted">輸入主密碼以解鎖保險箱</p>
+    <form id="unlock-form" autocomplete="off">
+      <input type="password" id="unlock-pw" class="text-input" placeholder="主密碼" required autocomplete="current-password">
+      <div id="unlock-error" class="form-error hidden"></div>
+      <button type="submit" class="btn-primary">解鎖</button>
+    </form>
+    <button type="button" id="show-import-btn" class="btn-link">從備份檔還原</button>
+  </div>
+</div>
+
+<!-- 主畫面 -->
+<div id="main-view" class="screen hidden">
+  <header class="topbar">
+    <div class="topbar-title">🔒 私密保險箱</div>
+    <div class="topbar-actions">
+      <button type="button" id="settings-btn" class="icon-btn" title="設定">⚙️</button>
+      <button type="button" id="lock-btn" class="icon-btn" title="立即鎖定">🔒</button>
+    </div>
+  </header>
+
+  <div class="search-bar">
+    <input type="search" id="search-input" class="text-input" placeholder="搜尋標題 / 帳號 / 網址...">
+  </div>
+
+  <div class="type-tabs" id="type-tabs">
+    <button class="type-tab active" data-type="all">全部</button>
+    <button class="type-tab" data-type="login">帳號密碼</button>
+    <button class="type-tab" data-type="card">信用卡</button>
+    <button class="type-tab" data-type="note">安全記事</button>
+  </div>
+
+  <main id="entry-list" class="entry-list"></main>
+  <div id="empty-state" class="empty-state hidden">
+    <p>目前沒有資料</p>
+    <p class="muted small">點右下角「＋」新增一筆</p>
+  </div>
+
+  <button type="button" id="fab-add" class="fab" title="新增">＋</button>
+</div>
+
+<!-- 新增/編輯 modal -->
+<div id="entry-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2 id="entry-modal-title">新增資料</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <form id="entry-form">
+      <input type="hidden" id="entry-id">
+      <label class="field-label">類型</label>
+      <select id="entry-type" class="text-input">
+        <option value="login">帳號密碼</option>
+        <option value="card">信用卡</option>
+        <option value="note">安全記事</option>
+      </select>
+
+      <label class="field-label">標題</label>
+      <input type="text" id="entry-title" class="text-input" placeholder="例如：Gmail、玉山銀行卡" required>
+
+      <div id="fields-login" class="type-fields">
+        <label class="field-label">帳號 / Email</label>
+        <input type="text" id="f-username" class="text-input" autocomplete="off">
+        <label class="field-label">密碼</label>
+        <div class="input-with-btn">
+          <input type="password" id="f-password" class="text-input" autocomplete="off">
+          <button type="button" id="gen-pw-btn" class="mini-btn" title="產生密碼">🎲</button>
+        </div>
+        <label class="field-label">網址</label>
+        <input type="text" id="f-url" class="text-input" placeholder="https://" autocomplete="off">
+      </div>
+
+      <div id="fields-card" class="type-fields hidden">
+        <label class="field-label">持卡人</label>
+        <input type="text" id="f-holder" class="text-input" autocomplete="off">
+        <label class="field-label">卡號</label>
+        <input type="text" id="f-number" class="text-input" inputmode="numeric" autocomplete="off">
+        <div class="row-2">
+          <div>
+            <label class="field-label">有效期限</label>
+            <input type="text" id="f-expiry" class="text-input" placeholder="MM/YY" autocomplete="off">
+          </div>
+          <div>
+            <label class="field-label">安全碼 CVV</label>
+            <input type="text" id="f-cvv" class="text-input" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+      </div>
+
+      <div id="fields-note" class="type-fields hidden">
+        <label class="field-label">內容</label>
+        <textarea id="f-content" class="text-input textarea" rows="5"></textarea>
+      </div>
+
+      <label class="field-label">備註</label>
+      <textarea id="f-notes" class="text-input textarea" rows="2"></textarea>
+
+      <div class="modal-actions">
+        <button type="button" id="delete-entry-btn" class="btn-danger hidden">刪除</button>
+        <button type="submit" class="btn-primary">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 檢視 modal -->
+<div id="view-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2 id="view-modal-title">-</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <div id="view-modal-body" class="view-body"></div>
+    <div class="modal-actions">
+      <button type="button" id="view-edit-btn" class="btn-primary">編輯</button>
+    </div>
+  </div>
+</div>
+
+<!-- 密碼產生器 modal -->
+<div id="pwgen-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2>密碼產生器</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <div class="pwgen-output" id="pwgen-output">........</div>
+    <label class="field-label">長度：<span id="pwgen-len-val">16</span></label>
+    <input type="range" id="pwgen-len" min="8" max="32" value="16">
+    <label class="checkbox-row"><input type="checkbox" id="pwgen-upper" checked> 大寫字母 A-Z</label>
+    <label class="checkbox-row"><input type="checkbox" id="pwgen-lower" checked> 小寫字母 a-z</label>
+    <label class="checkbox-row"><input type="checkbox" id="pwgen-digits" checked> 數字 0-9</label>
+    <label class="checkbox-row"><input type="checkbox" id="pwgen-symbols" checked> 符號 !@#$%...</label>
+    <div class="modal-actions">
+      <button type="button" id="pwgen-refresh" class="btn-secondary">🔄 重新產生</button>
+      <button type="button" id="pwgen-use" class="btn-primary">使用這組密碼</button>
+    </div>
+  </div>
+</div>
+
+<!-- 設定 modal -->
+<div id="settings-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2>設定</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <label class="field-label">自動鎖定時間</label>
+    <select id="autolock-select" class="text-input">
+      <option value="1">1 分鐘</option>
+      <option value="5">5 分鐘</option>
+      <option value="15">15 分鐘</option>
+      <option value="30">30 分鐘</option>
+      <option value="0">永不(不建議)</option>
+    </select>
+
+    <hr>
+    <button type="button" id="export-btn" class="btn-secondary full">⬇️ 匯出加密備份</button>
+    <button type="button" id="show-import-btn-2" class="btn-secondary full">⬆️ 匯入備份檔</button>
+    <button type="button" id="change-pw-btn" class="btn-secondary full">🔑 變更主密碼</button>
+    <hr>
+    <button type="button" id="wipe-btn" class="btn-danger full">🗑️ 清除所有資料</button>
+  </div>
+</div>
+
+<!-- 匯入 modal -->
+<div id="import-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2>從備份檔還原</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <p class="muted small">選擇先前匯出的備份檔(.json)。還原後會<strong>覆蓋</strong>目前保險箱裡的所有資料,請先確認。還原後請用備份當時的主密碼解鎖。</p>
+    <input type="file" id="import-file" accept="application/json,.json" class="text-input">
+    <div id="import-error" class="form-error hidden"></div>
+    <div class="modal-actions">
+      <button type="button" id="import-confirm-btn" class="btn-primary">確認還原</button>
+    </div>
+  </div>
+</div>
+
+<!-- 變更主密碼 modal -->
+<div id="changepw-modal" class="modal-overlay hidden">
+  <div class="modal-box fade-in">
+    <div class="modal-header">
+      <h2>變更主密碼</h2>
+      <button type="button" class="icon-btn close-modal">✕</button>
+    </div>
+    <form id="changepw-form" autocomplete="off">
+      <label class="field-label">目前主密碼</label>
+      <input type="password" id="cp-current" class="text-input" required autocomplete="current-password">
+      <label class="field-label">新主密碼</label>
+      <input type="password" id="cp-new1" class="text-input" required minlength="8" autocomplete="new-password">
+      <label class="field-label">再輸入一次新主密碼</label>
+      <input type="password" id="cp-new2" class="text-input" required minlength="8" autocomplete="new-password">
+      <div id="changepw-error" class="form-error hidden"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn-primary">確認變更</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="loading-overlay" class="loading-overlay hidden">
+  <div class="spinner"></div>
+</div>
+
+<script src="script.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+</script>
+</body>
+</html>
