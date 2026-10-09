@@ -257,7 +257,7 @@ const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') 
  */
 const MODE = SELF_TRANSFER ? 'old-self-transfer' : (BIND_TOKEN ? 'old-bind-token' : 'new-primary');
 
-const APP_VERSION = 'v9.2.1-test (Pending State Cleanup)';
+const APP_VERSION = 'v9.2.2-test (Member Cache Revalidation)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -329,6 +329,18 @@ window.onload = async () => {
  *   NOT_FOUND          → 先給「舊會員帳號轉移」選項，不直接跳去新會員註冊頁
  * @param {string} newUid 新 Provider 的 line_user_id
  */
+/**
+ * 後端確認這個 UID 已經不是有效會員（NOT_FOUND／DUPLICATE_NEW_UID）時：清掉這個
+ * UID 的前端會員／賣場／訂單快取（含 localStorage 備援），並收起已經用快取先畫出來
+ * 的會員首頁。快取只是加速顯示，身分一律以後端 checkUser 的即時結果為準。
+ */
+function revokeCachedMember_(uid) {
+  ['ormkub_member_', 'ormkub_markets_', 'ormkub_orders_'].forEach((prefix) => safeSessionRemove_(prefix + uid));
+  currentUser = null;
+  const dashboard = document.getElementById('dashboard-view');
+  if (dashboard) dashboard.classList.add('hidden');
+}
+
 async function handleMemberLogin(newUid) {
   const cacheKey = `ormkub_member_${newUid}`;
   const cachedString = safeSessionGet_(cacheKey);
@@ -364,6 +376,7 @@ async function handleMemberLogin(newUid) {
   }
 
   if (result.code === 'DUPLICATE_NEW_UID') {
+    revokeCachedMember_(newUid);
     hideLoading();
     showBindResult(result.message || '此 LINE 帳號對應到多筆會員資料，請聯絡管理員處理。');
     return;
@@ -392,10 +405,11 @@ async function handleMemberLogin(newUid) {
   // NOT_FOUND：只是拿得到新 UID，不代表已註冊。這裡一定是 new-primary 模式
   // （bind_token 模式已經在 window.onload 分流掉，不會執行到這行），
   // 先給「舊會員帳號轉移」選項，不要直接跳去新會員註冊。
-  if (!cachedUser) {
-    hideLoading();
-    showView('old-member-transfer-view');
-  }
+  // 就算剛才已經用快取畫出會員首頁（例如管理員清除了 line_user_id），也要清掉快取並切換畫面，
+  // 不能讓舊快取繼續顯示會員資料。
+  revokeCachedMember_(newUid);
+  hideLoading();
+  showView('old-member-transfer-view');
 }
 
 /**
@@ -689,6 +703,12 @@ function forceUpdate() {
   safeSessionClear_();
   // safeSessionClear_ 不會清 localStorage 備援，轉移暫存要另外清，「強制更新」才真的能救回卡住的狀態。
   clearPendingTransferState_();
+  // 會員／賣場／訂單快取也有 localStorage 備援（__sf_ormkub_*），一併清掉，下次開啟一律以後端為準。
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.indexOf('__sf_ormkub_') === 0)
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* localStorage 不可用 */ }
   showLoading();
   location.reload();
 }
@@ -789,6 +809,7 @@ async function loadMarkets(uid, isBackground = false) {
   }
   try {
     const mkts = await callApi('getMarkets', {uid});
+    if (!currentUser) return; // 身分已被撤銷（見 revokeCachedMember_），不再寫回快取或渲染
     safeSessionSet_(cacheKey, JSON.stringify(mkts));
     loadedData.markets = true;
     const currentTab = document.getElementById('tab-markets');
@@ -817,6 +838,7 @@ async function loadOrders(uid, isBackground = false) {
 
   try {
     const groups = await callApi('getOrders', {uid});
+    if (!currentUser) return; // 身分已被撤銷（見 revokeCachedMember_），不再寫回快取或渲染
     safeSessionSet_(cacheKey, JSON.stringify(groups || []));
     loadedData.orders = true;
     currentOrdersData = groups || []; 
