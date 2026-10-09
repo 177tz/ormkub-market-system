@@ -1,4 +1,4 @@
-const CACHE_NAME = "ormkub-market-shell-v1";
+const CACHE_NAME = "ormkub-market-shell-v2";
 const SHELL_URLS = ["./", "./index.html", "./style.css", "./script.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {

@@ -172,11 +172,78 @@ function sessionOnlyRemove_(key) {
   delete __memoryStorage[key];
 }
 
+// ============================================================
+// 🧹 舊會員轉移暫存狀態（pendingBindToken / pendingSelfTransfer / pendingNewUid）
+// ------------------------------------------------------------
+// 這三個值透過 safeSessionSet_ 也會寫進永不過期的 localStorage，用來撐過 LIFF
+// 登入的 OAuth 往返。但綁定流程若在 catch、登入中途關閉頁面等路徑結束，原本
+// 不會清掉，之後每次從圖文選單開會員系統都會被殘留值判成舊帳號模式、一直報錯。
+// 這裡只補「失敗／放棄」路徑的清除與逾時，成功路徑與綁定核心流程完全不動。
+// ============================================================
+const PENDING_TRANSFER_KEYS_ = ['pendingBindToken', 'pendingSelfTransfer', 'pendingNewUid'];
+const PENDING_TRANSFER_AT_KEY_ = 'pendingTransferAt';
+// 跟後端 BIND_TOKEN_TTL_SECONDS（600 秒）一致：超過這個時間 token 本來就失效了。
+const PENDING_TRANSFER_TTL_MS_ = 10 * 60 * 1000;
+
+/** 清掉所有舊會員轉移暫存狀態與舊 Provider 登入嘗試旗標，讓下次開啟回到一般登入。 */
+function clearPendingTransferState_() {
+  PENDING_TRANSFER_KEYS_.forEach(safeSessionRemove_);
+  safeSessionRemove_(PENDING_TRANSFER_AT_KEY_);
+  sessionOnlyRemove_('__login_attempted_old');
+}
+
+/** 記錄轉移流程開始（或重新開始）的時間，供 expireStalePendingTransfer_ 判斷逾時。 */
+function markPendingTransferStarted_() {
+  safeSessionSet_(PENDING_TRANSFER_AT_KEY_, String(Date.now()));
+}
+
+/**
+ * 只在「網址沒有帶 bind_token / self_transfer」時呼叫：暫存狀態沒有時間戳記
+ * （本修正上線前殘留的舊資料）或已超過 TTL，就視為殘留、整組清掉。
+ * 正常的 OAuth 往返只需要幾秒，不會被這裡誤清。
+ */
+function expireStalePendingTransfer_() {
+  const hasPending = PENDING_TRANSFER_KEYS_.some((k) => safeSessionGet_(k) !== null);
+  if (!hasPending) {
+    safeSessionRemove_(PENDING_TRANSFER_AT_KEY_);
+    return;
+  }
+  const startedAt = Number(safeSessionGet_(PENDING_TRANSFER_AT_KEY_));
+  if (!startedAt || Date.now() - startedAt > PENDING_TRANSFER_TTL_MS_) {
+    console.log('[PENDING_TRANSFER_EXPIRED]', { startedAt: startedAt || null });
+    clearPendingTransferState_();
+  }
+}
+
 // 診斷用：在解析任何網址參數之前，先原封不動印出瀏覽器實際landing的網址，
 // 排除「我們自己的程式碼在liff.init()之前就已經動過URL」這個可能性時的第一手證據。
 console.log('[RAW_LANDING_URL]', { href: window.location.href, search: window.location.search });
 
 const urlParams = new URLSearchParams(window.location.search);
+
+/**
+ * 從 LINE 啟動 LIFF（例如 https://liff.line.me/<舊ID>?bind_token=xxx）時，第一次載入的
+ * 「primary redirect」網址會是 Endpoint?liff.state=%3Fbind_token%3Dxxx——原本的查詢參數
+ * 被包在 liff.state 裡，要等 liff.init() 執行後 SDK 才會把它拆開、導到 secondary 網址。
+ * 但 MODE（決定要拿哪個 Provider 的 LIFF ID 去 init）必須在 init 之前就決定，所以這裡先
+ * 自己把 liff.state 裡的查詢參數讀出來；否則會誤判成 new-primary、拿新 ID 去 init，
+ * 在 LINE 內被 SDK 以「啟動的 LIFF App 與 init 的 liffId 不一致」拒絕（Invalid LIFF ID）。
+ * 只讀取，不改寫網址，liff.state 的導轉仍交給 SDK 處理。
+ * @param {string} name
+ * @return {string|null}
+ */
+function getLiffStateParam_(name) {
+  try {
+    const state = urlParams.get('liff.state');
+    if (!state) return null;
+    const q = state.indexOf('?');
+    if (q === -1) return null;
+    return new URLSearchParams(state.slice(q + 1).split('#')[0]).get(name);
+  } catch (e) {
+    return null;
+  }
+}
+
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
 const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
@@ -188,12 +255,19 @@ const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
 // redirectUri 呼叫 liff.login()（讓 SDK 用預設行為跳回乾淨的 Endpoint URL），
 // bind_token 改成跟 pendingNewUid 一樣先存進 safeSession，登入回跳後從這裡讀回來，
 // 不再依賴網址上的 query string 撐過整趟 OAuth 往返。
-const urlBindToken = urlParams.get("bind_token");
-if (urlBindToken) safeSessionSet_('pendingBindToken', urlBindToken);
-const BIND_TOKEN = urlBindToken || safeSessionGet_('pendingBindToken');
+const urlBindToken = urlParams.get("bind_token") || getLiffStateParam_("bind_token");
 // 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
 // 同上，不能再靠網址的 ?self_transfer=1 撐過 OAuth 往返，一樣先存進 safeSession。
-const urlSelfTransfer = urlParams.get("self_transfer") === "1";
+const urlSelfTransfer = (urlParams.get("self_transfer") || getLiffStateParam_("self_transfer")) === "1";
+// 網址帶參數＝流程剛開始，記錄時間；沒帶＝一般開啟或 OAuth 回跳，先清掉逾時／無時間戳記的殘留，
+// 必須在下面讀取 BIND_TOKEN / SELF_TRANSFER 之前執行，殘留值才不會把 MODE 判成舊帳號模式。
+if (urlBindToken || urlSelfTransfer) {
+  markPendingTransferStarted_();
+} else {
+  expireStalePendingTransfer_();
+}
+if (urlBindToken) safeSessionSet_('pendingBindToken', urlBindToken);
+const BIND_TOKEN = urlBindToken || safeSessionGet_('pendingBindToken');
 if (urlSelfTransfer) safeSessionSet_('pendingSelfTransfer', '1');
 const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') === '1';
 
@@ -207,7 +281,7 @@ const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') 
  */
 const MODE = SELF_TRANSFER ? 'old-self-transfer' : (BIND_TOKEN ? 'old-bind-token' : 'new-primary');
 
-const APP_VERSION = 'v9.2.0 (Single LIFF Init Per Page)';
+const APP_VERSION = 'v9.3.0 (Bind State & Cache Fixes)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -279,6 +353,18 @@ window.onload = async () => {
  *   NOT_FOUND          → 先給「舊會員帳號轉移」選項，不直接跳去新會員註冊頁
  * @param {string} newUid 新 Provider 的 line_user_id
  */
+/**
+ * 後端確認這個 UID 已經不是有效會員（NOT_FOUND／DUPLICATE_NEW_UID）時：清掉這個
+ * UID 的前端會員／賣場／訂單快取（含 localStorage 備援），並收起已經用快取先畫出來
+ * 的會員首頁。快取只是加速顯示，身分一律以後端 checkUser 的即時結果為準。
+ */
+function revokeCachedMember_(uid) {
+  ['ormkub_member_', 'ormkub_markets_', 'ormkub_orders_'].forEach((prefix) => safeSessionRemove_(prefix + uid));
+  currentUser = null;
+  const dashboard = document.getElementById('dashboard-view');
+  if (dashboard) dashboard.classList.add('hidden');
+}
+
 async function handleMemberLogin(newUid) {
   const cacheKey = `ormkub_member_${newUid}`;
   const cachedString = safeSessionGet_(cacheKey);
@@ -314,6 +400,7 @@ async function handleMemberLogin(newUid) {
   }
 
   if (result.code === 'DUPLICATE_NEW_UID') {
+    revokeCachedMember_(newUid);
     hideLoading();
     showBindResult(result.message || '此 LINE 帳號對應到多筆會員資料，請聯絡管理員處理。');
     return;
@@ -342,10 +429,11 @@ async function handleMemberLogin(newUid) {
   // NOT_FOUND：只是拿得到新 UID，不代表已註冊。這裡一定是 new-primary 模式
   // （bind_token 模式已經在 window.onload 分流掉，不會執行到這行），
   // 先給「舊會員帳號轉移」選項，不要直接跳去新會員註冊。
-  if (!cachedUser) {
-    hideLoading();
-    showView('old-member-transfer-view');
-  }
+  // 就算剛才已經用快取畫出會員首頁（例如管理員清除了 line_user_id），也要清掉快取並切換畫面，
+  // 不能讓舊快取繼續顯示會員資料。
+  revokeCachedMember_(newUid);
+  hideLoading();
+  showView('old-member-transfer-view');
 }
 
 /**
@@ -396,6 +484,8 @@ async function runBindTokenMode(bindToken) {
       // 防止登入迴圈：同一頁只允許自動呼叫一次 liff.login()。
       const alreadyAttempted = sessionOnlyGet_('__login_attempted_old') === '1';
       if (alreadyAttempted) {
+        // 這趟轉移已無法繼續：先清掉暫存，使用者就算直接關閉頁面，下次開啟也會回到一般登入。
+        clearPendingTransferState_();
         showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
         return;
       }
@@ -444,6 +534,8 @@ async function runBindTokenMode(bindToken) {
   } catch (e) {
     console.error(e);
     hideLoading();
+    // 例外結束（init/getProfile/網路失敗、後端回傳非 JSON 等）：清掉暫存，避免之後每次開啟都卡在舊帳號模式。
+    clearPendingTransferState_();
     if (e && e.code === 'INVALID_LIFF_ID_FORMAT') {
       showLoginError_('系統設定錯誤，請聯絡管理員。');
     } else {
@@ -463,6 +555,8 @@ async function runSelfTransferMode() {
     const pendingNewUid = safeSessionGet_('pendingNewUid');
     if (!pendingNewUid) {
       // 沒有暫存的新 UID（例如被直接開啟 ?self_transfer=1），視為異常，導回乾淨首頁重新走正常登入。
+      // 導回前一定要清掉 pendingSelfTransfer，否則導回後又被判成 old-self-transfer，形成無限導轉。
+      clearPendingTransferState_();
       window.location.replace(window.location.origin + window.location.pathname);
       return;
     }
@@ -473,6 +567,8 @@ async function runSelfTransferMode() {
     if (!liff.isLoggedIn()) {
       const alreadyAttempted = sessionOnlyGet_('__login_attempted_old') === '1';
       if (alreadyAttempted) {
+        // 這趟轉移已無法繼續：先清掉暫存，使用者就算直接關閉頁面，下次開啟也會回到一般登入。
+        clearPendingTransferState_();
         showLoginError_('舊帳號登入未完成或已逾時，請重新登入。');
         return;
       }
@@ -517,6 +613,7 @@ async function runSelfTransferMode() {
   } catch (e) {
     console.error(e);
     hideLoading();
+    clearPendingTransferState_(); // 理由同 runBindTokenMode() 的 catch。
     if (e && e.code === 'INVALID_LIFF_ID_FORMAT') {
       showLoginError_('系統設定錯誤，請聯絡管理員。');
     } else {
@@ -535,6 +632,7 @@ function startOldAccountTransfer() {
     return;
   }
   safeSessionSet_('pendingNewUid', currentUid);
+  markPendingTransferStarted_();
   showLoading();
   window.location.replace(window.location.origin + window.location.pathname + '?self_transfer=1');
 }
@@ -571,10 +669,7 @@ function showLoginError_(message) {
 /** 使用者主動點擊「重新登入」：清掉登入嘗試旗標與暫存狀態，重新整理回乾淨首頁重新走一次登入流程。 */
 function retryLoginFromError_() {
   sessionOnlyRemove_('__login_attempted_new');
-  sessionOnlyRemove_('__login_attempted_old');
-  safeSessionRemove_('pendingNewUid');
-  safeSessionRemove_('pendingBindToken');
-  safeSessionRemove_('pendingSelfTransfer');
+  clearPendingTransferState_();
   window.location.replace(window.location.origin + window.location.pathname);
 }
 
@@ -630,6 +725,14 @@ async function callMemberApi(act, pay={}) {
 
 function forceUpdate() {
   safeSessionClear_();
+  // safeSessionClear_ 不會清 localStorage 備援，轉移暫存要另外清，「強制更新」才真的能救回卡住的狀態。
+  clearPendingTransferState_();
+  // 會員／賣場／訂單快取也有 localStorage 備援（__sf_ormkub_*），一併清掉，下次開啟一律以後端為準。
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.indexOf('__sf_ormkub_') === 0)
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* localStorage 不可用 */ }
   showLoading();
   location.reload();
 }
@@ -730,6 +833,7 @@ async function loadMarkets(uid, isBackground = false) {
   }
   try {
     const mkts = await callApi('getMarkets', {uid});
+    if (!currentUser) return; // 身分已被撤銷（見 revokeCachedMember_），不再寫回快取或渲染
     safeSessionSet_(cacheKey, JSON.stringify(mkts));
     loadedData.markets = true;
     const currentTab = document.getElementById('tab-markets');
@@ -758,6 +862,7 @@ async function loadOrders(uid, isBackground = false) {
 
   try {
     const groups = await callApi('getOrders', {uid});
+    if (!currentUser) return; // 身分已被撤銷（見 revokeCachedMember_），不再寫回快取或渲染
     safeSessionSet_(cacheKey, JSON.stringify(groups || []));
     loadedData.orders = true;
     currentOrdersData = groups || []; 
