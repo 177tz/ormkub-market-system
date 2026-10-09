@@ -220,6 +220,30 @@ function expireStalePendingTransfer_() {
 console.log('[RAW_LANDING_URL]', { href: window.location.href, search: window.location.search });
 
 const urlParams = new URLSearchParams(window.location.search);
+
+/**
+ * 從 LINE 啟動 LIFF（例如 https://liff.line.me/<舊ID>?bind_token=xxx）時，第一次載入的
+ * 「primary redirect」網址會是 Endpoint?liff.state=%3Fbind_token%3Dxxx——原本的查詢參數
+ * 被包在 liff.state 裡，要等 liff.init() 執行後 SDK 才會把它拆開、導到 secondary 網址。
+ * 但 MODE（決定要拿哪個 Provider 的 LIFF ID 去 init）必須在 init 之前就決定，所以這裡先
+ * 自己把 liff.state 裡的查詢參數讀出來；否則會誤判成 new-primary、拿新 ID 去 init，
+ * 在 LINE 內被 SDK 以「啟動的 LIFF App 與 init 的 liffId 不一致」拒絕（Invalid LIFF ID）。
+ * 只讀取，不改寫網址，liff.state 的導轉仍交給 SDK 處理。
+ * @param {string} name
+ * @return {string|null}
+ */
+function getLiffStateParam_(name) {
+  try {
+    const state = urlParams.get('liff.state');
+    if (!state) return null;
+    const q = state.indexOf('?');
+    if (q === -1) return null;
+    return new URLSearchParams(state.slice(q + 1).split('#')[0]).get(name);
+  } catch (e) {
+    return null;
+  }
+}
+
 const FROM_LINE = urlParams.get("from") === "line";
 // 防止重複回跳
 const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
@@ -231,10 +255,10 @@ const HAS_REDIRECTED = sessionOnlyGet_("__from_line_done") === "1";
 // redirectUri 呼叫 liff.login()（讓 SDK 用預設行為跳回乾淨的 Endpoint URL），
 // bind_token 改成跟 pendingNewUid 一樣先存進 safeSession，登入回跳後從這裡讀回來，
 // 不再依賴網址上的 query string 撐過整趟 OAuth 往返。
-const urlBindToken = urlParams.get("bind_token");
+const urlBindToken = urlParams.get("bind_token") || getLiffStateParam_("bind_token");
 // 使用者直接開站、新 UID 查 I 欄找不到時，自助「舊會員帳號轉移」流程：見 startOldAccountTransfer() / runSelfTransferMode()。
 // 同上，不能再靠網址的 ?self_transfer=1 撐過 OAuth 往返，一樣先存進 safeSession。
-const urlSelfTransfer = urlParams.get("self_transfer") === "1";
+const urlSelfTransfer = (urlParams.get("self_transfer") || getLiffStateParam_("self_transfer")) === "1";
 // 網址帶參數＝流程剛開始，記錄時間；沒帶＝一般開啟或 OAuth 回跳，先清掉逾時／無時間戳記的殘留，
 // 必須在下面讀取 BIND_TOKEN / SELF_TRANSFER 之前執行，殘留值才不會把 MODE 判成舊帳號模式。
 if (urlBindToken || urlSelfTransfer) {
@@ -257,7 +281,7 @@ const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') 
  */
 const MODE = SELF_TRANSFER ? 'old-self-transfer' : (BIND_TOKEN ? 'old-bind-token' : 'new-primary');
 
-const APP_VERSION = 'v9.2.2-test (Member Cache Revalidation)';
+const APP_VERSION = 'v9.2.3-test (liff.state Mode Detection)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
