@@ -281,7 +281,7 @@ const SELF_TRANSFER = urlSelfTransfer || safeSessionGet_('pendingSelfTransfer') 
  */
 const MODE = SELF_TRANSFER ? 'old-self-transfer' : (BIND_TOKEN ? 'old-bind-token' : 'new-primary');
 
-const APP_VERSION = 'v9.3.0 (Bind State & Cache Fixes)';
+const APP_VERSION = 'v9.3.1 (Recent Announcements)';
 let currentUid = '', currentUser = null;
 let loadedData = { markets: false, orders: false };
 let currentOrdersData = [];
@@ -807,7 +807,7 @@ function renderProfile(u) {
       return `<div class="anno-card ${typeClass} fade-in"><div class="anno-title"><i class="bi ${icon}"></i> ${a.title}</div><div class="anno-content">${a.content}</div></div>`;
     }).join('');
   } else {
-    annoBox.innerHTML = `<div class="anno-card type-info"><div class="anno-title"><i class="bi bi-megaphone-fill"></i> 最新公告</div><div class="anno-content">目前沒有新公告。</div></div>`;
+    annoBox.innerHTML = `<div class="anno-card type-info"><div class="anno-title"><i class="bi bi-megaphone-fill"></i> 最新公告</div><div class="anno-content">目前沒有最新公告</div></div>`;
   }
   ['group','email','phone','receiver','store'].forEach(k => { document.getElementById('p-'+k).innerText = u[k==='group'?'group_name':(k==='receiver'?'name':k)]; });
 }
