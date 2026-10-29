@@ -905,8 +905,10 @@ function renderOrders(groups) {
   }
   const formatTime = (t) => {
     if (!t) return '-';
+    // 沒有四位數年份（如舊索引的 "10/27 19:31"）就原樣顯示，避免瀏覽器自行猜年
+    if (!/\d{4}/.test(String(t))) return t;
     try {
-      let d = new Date(t); if (isNaN(d.getTime())) return t; 
+      let d = new Date(t); if (isNaN(d.getTime())) return t;
       return d.getFullYear() + '/' + (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
     } catch(e) { return t; }
   };
